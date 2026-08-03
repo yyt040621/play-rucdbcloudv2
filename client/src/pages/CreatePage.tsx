@@ -47,6 +47,8 @@ export function CreatePage({ theme, tables, onRefreshTables }: CreatePageProps) 
   const [fields, setFields] = useState<FieldDef[]>([
     { id: ++fieldId, name: '', type: 'INT', notNull: true, isPrimary: true },
   ]);
+  // 建表校验错误提示
+  const [buildError, setBuildError] = useState<string | null>(null);
 
   // 插入数据表单
   const [insertTable, setInsertTable] = useState('employees');
@@ -62,20 +64,79 @@ export function CreatePage({ theme, tables, onRefreshTables }: CreatePageProps) 
   }, [insertTable]);
 
   // 建表-添加字段
-  const addField = () => setFields([
-    ...fields,
-    { id: ++fieldId, name: '', type: 'VARCHAR(50)', notNull: false, isPrimary: false },
-  ]);
+  const addField = () => {
+    setFields([
+      ...fields,
+      { id: ++fieldId, name: '', type: 'VARCHAR(50)', notNull: false, isPrimary: false },
+    ]);
+    setBuildError(null);
+  };
 
   // 建表-更新字段
   const updateField = (id: number, key: keyof FieldDef, val: string | boolean) => {
     setFields(fields.map((f) => (f.id === id ? { ...f, [key]: val } : f)));
+    setBuildError(null);
   };
 
   // 建表-移除字段
   const removeField = (id: number) => {
     if (fields.length <= 1) return;
     setFields(fields.filter((f) => f.id !== id));
+    setBuildError(null);
+  };
+
+  // 切换主键（单选：设某列为主键时，其他列取消主键；主键强制 NOT NULL）
+  const togglePrimary = (id: number) => {
+    setFields(fields.map((f) => {
+      if (f.id === id) {
+        const isPrimary = !f.isPrimary;
+        return { ...f, isPrimary, notNull: isPrimary ? true : f.notNull };
+      }
+      return { ...f, isPrimary: false };
+    }));
+    setBuildError(null);
+  };
+
+  // 校验建表表单，返回错误数组（空 = 通过）
+  const validateTable = (): string[] => {
+    const errors: string[] = [];
+
+    // 1. 表名
+    if (!tableName.trim()) {
+      errors.push('请输入表名');
+    } else if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(tableName)) {
+      errors.push('表名只能包含字母、数字、下划线，且不能以数字开头');
+    }
+
+    // 2. 有效字段（列名非空）
+    const validCols = fields.filter((f) => f.name.trim());
+    if (validCols.length === 0) {
+      errors.push('至少需要一个有效字段（填写列名）');
+    } else {
+      // 3. 列名唯一
+      const seen = new Set<string>();
+      for (const f of validCols) {
+        const name = f.name.trim().toLowerCase();
+        if (seen.has(name)) {
+          errors.push(`列名重复: "${f.name}"`);
+          break;
+        }
+        seen.add(name);
+      }
+      // 4. 列名合法性
+      for (const f of validCols) {
+        if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(f.name.trim())) {
+          errors.push(`列名 "${f.name}" 非法（只能包含字母、数字、下划线，不能以数字开头）`);
+          break;
+        }
+      }
+      // 5. 主键
+      if (!validCols.some((f) => f.isPrimary)) {
+        errors.push('请至少选择一个主键（点击 PK 按钮）');
+      }
+    }
+
+    return errors;
   };
 
   // 生成当前 Tab 的 SQL
@@ -97,9 +158,16 @@ export function CreatePage({ theme, tables, onRefreshTables }: CreatePageProps) 
     }
   }, [formTab, tableName, fields, insertTable, colValues, insertCols]);
 
-  // 建表-生成并执行
+  // 建表-生成并执行（先校验）
   const handleBuildTable = useCallback(async () => {
-    if (!tableName.trim()) return;
+    // 校验表单
+    const errors = validateTable();
+    if (errors.length > 0) {
+      setBuildError(errors[0]);
+      return;
+    }
+    setBuildError(null);
+
     const cols = fields
       .filter((f) => f.name.trim())
       .map((f) => {
@@ -225,7 +293,19 @@ export function CreatePage({ theme, tables, onRefreshTables }: CreatePageProps) 
                               {COLUMN_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
                             </select>
                             <button
+                              onClick={() => togglePrimary(f.id)}
+                              title={f.isPrimary ? '主键（点击取消）' : '设为主键 PK'}
+                              className={`px-2 py-1.5 text-[10px] rounded border font-bold cursor-pointer
+                                ${f.isPrimary
+                                  ? 'bg-yellow-500/20 border-yellow-500 text-yellow-500'
+                                  : 'border-[var(--border-color)] text-[var(--text-secondary)] hover:border-yellow-500/50 hover:text-yellow-500'
+                                }`}
+                            >
+                              PK
+                            </button>
+                            <button
                               onClick={() => updateField(f.id, 'notNull', !f.notNull)}
+                              title={f.notNull ? 'NOT NULL（点击取消）' : '设为 NOT NULL'}
                               className={`px-2 py-1.5 text-[10px] rounded border font-bold cursor-pointer
                                 ${f.notNull
                                   ? 'bg-[var(--accent)]/10 border-[var(--accent)] text-[var(--accent)]'
@@ -254,6 +334,16 @@ export function CreatePage({ theme, tables, onRefreshTables }: CreatePageProps) 
                         + 添加字段
                       </button>
                     </div>
+
+                    {/* 建表错误提示 */}
+                    {buildError && (
+                      <div className="px-3 py-2.5 text-xs rounded-lg
+                        bg-[var(--error)]/10 border border-[var(--error)]/40 text-[var(--error)]
+                        flex items-start gap-2">
+                        <span>⚠️</span>
+                        <span>{buildError}</span>
+                      </div>
+                    )}
 
                     <button
                       onClick={handleBuildTable}
