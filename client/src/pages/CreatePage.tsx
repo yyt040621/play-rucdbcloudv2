@@ -160,7 +160,7 @@ export function CreatePage({ theme, tables, onRefreshTables }: CreatePageProps) 
         .filter((f) => f.name.trim())
         .map((f) => buildColumnDef(f));
       if (cols.length === 0) return '';
-      return `CREATE TABLE IF NOT EXISTS \`${tableName}\` (\n${cols.join(',\n')}\n);`;
+      return `CREATE TABLE \`${tableName}\` (\n${cols.join(',\n')}\n);`;
     } else {
       return buildInsertSQL(insertTable, colValues, insertCols);
     }
@@ -176,11 +176,18 @@ export function CreatePage({ theme, tables, onRefreshTables }: CreatePageProps) 
     }
     setBuildError(null);
 
+    // 检查表是否已存在（避免静默覆盖）
+    const exists = tables.some((t) => t.name === tableName);
+    if (exists) {
+      setBuildError(`表 "${tableName}" 已存在。请使用其他表名，或先删除该表再重建`);
+      return;
+    }
+
     const cols = fields
       .filter((f) => f.name.trim())
       .map((f) => buildColumnDef(f));
     if (cols.length === 0) return;
-    const query = `CREATE TABLE IF NOT EXISTS \`${tableName}\` (\n${cols.join(',\n')}\n);`;
+    const query = `CREATE TABLE \`${tableName}\` (\n${cols.join(',\n')}\n);`;
     setSql(query);
     const execResults = await execute(query);
     if (execResults) {
@@ -193,7 +200,7 @@ export function CreatePage({ theme, tables, onRefreshTables }: CreatePageProps) 
       onRefreshTables();
       fetchTables();
     }
-  }, [tableName, fields, buildColumnDef, execute, onRefreshTables, fetchTables]);
+  }, [tableName, fields, tables, buildColumnDef, execute, onRefreshTables, fetchTables]);
 
   // 插入数据-执行
   const handleInsert = useCallback(async () => {
