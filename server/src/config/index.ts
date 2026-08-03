@@ -30,6 +30,12 @@ export const config = {
     maxTablesPerUser: parseInt(process.env.MAX_TABLES_PER_USER || '50', 10),
     maxSqlLengthKB: parseInt(process.env.MAX_SQL_LENGTH_KB || '10', 10),
     rateLimitPerMinute: parseInt(process.env.RATE_LIMIT_PER_MINUTE || '300', 10),
+    // 全局 IP 限流（所有用户合计，防批量请求）
+    globalRatePerMinute: parseInt(process.env.GLOBAL_RATE_PER_MINUTE || '1200', 10),
+    // 创建沙箱端点限流（防批量建库）
+    createSessionPerMinute: parseInt(process.env.CREATE_SESSION_PER_MINUTE || '20', 10),
+    // 活跃沙箱总配额（防资源耗尽）
+    maxActiveSandboxes: parseInt(process.env.MAX_ACTIVE_SANDBOXES || '200', 10),
     queryTimeoutSeconds: parseInt(process.env.QUERY_TIMEOUT_SECONDS || '30', 10),
   },
 

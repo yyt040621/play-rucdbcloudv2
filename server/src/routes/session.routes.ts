@@ -44,9 +44,12 @@ export function createSessionRoutes(sandboxManager: SandboxManager): Router {
       }
     } catch (err) {
       console.error('Session create error:', err);
-      res.status(500).json({
+      // 沙箱配额超限返回 429/400，其他返回 500
+      const msg = err instanceof Error ? err.message : '';
+      const status = msg.includes('上限') ? 400 : 500;
+      res.status(status).json({
         code: ErrorCode.INTERNAL_ERROR,
-        message: 'Failed to create session',
+        message: msg || 'Failed to create session',
       });
     }
   });

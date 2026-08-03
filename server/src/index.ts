@@ -10,7 +10,7 @@ import { AuditLogger } from './services/audit-logger';
 import { TPCCRunner } from './services/tpcc-runner';
 import { sessionMiddleware } from './middleware/session.middleware';
 import { createSqlGuardMiddleware } from './middleware/sql-guard.middleware';
-import { rateLimitMiddleware } from './middleware/rate-limit.middleware';
+import { sessionRateLimit, globalIpRateLimit, createSessionRateLimit } from './middleware/rate-limit.middleware';
 import { securityHeadersMiddleware } from './middleware/security-headers.middleware';
 import { createRoutes } from './routes';
 
@@ -72,7 +72,9 @@ async function main(): Promise<void> {
   // 全局中间件
   app.use(express.json({ limit: '20kb' })); // 限制请求体大小
   app.use(sessionMiddleware);
-  app.use(rateLimitMiddleware);
+  app.use(globalIpRateLimit);   // 全局 IP 限流（总量保护）
+  app.use(sessionRateLimit);    // 每会话限流
+  app.use('/api/v1/session', createSessionRateLimit); // 建沙箱端点严格限流
 
   // SQL 安全检查（仅对 /query 路由生效）
   app.use('/api/v1/query', createSqlGuardMiddleware(sandboxManager));

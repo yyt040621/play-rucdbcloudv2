@@ -28,6 +28,22 @@ export class SandboxManager {
     const now = new Date();
     const expiresAt = new Date(now.getTime() + config.session.ttlHours * 60 * 60 * 1000);
 
+    // 沙箱总配额检查（防批量建库耗尽资源）
+    try {
+      const rows = await this.adapter.execute(
+        `SELECT COUNT(*) AS cnt FROM \`${config.db.adminDatabase}\`.sandboxes WHERE status = 'active'`
+      );
+      const activeCount = ((rows as Array<Record<string, unknown>>)[0]?.cnt as number) || 0;
+      if (activeCount >= config.security.maxActiveSandboxes) {
+        throw new Error(`沙箱数量已达上限（${config.security.maxActiveSandboxes}），请稍后再试`);
+      }
+    } catch (err) {
+      // 管理库未初始化时忽略配额检查；配额超限则抛出
+      if (err instanceof Error && err.message.includes('沙箱数量')) {
+        throw err;
+      }
+    }
+
     // 创建沙箱数据库
     await this.adapter.createDatabase(dbName);
 
