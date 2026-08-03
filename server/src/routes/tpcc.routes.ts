@@ -1,16 +1,32 @@
 import { Router, Request, Response } from 'express';
 import { TPCCRunner, TPCScale } from '../services/tpcc-runner';
 import { ErrorCode } from '../types';
+import { SessionRequest } from '../middleware/session.middleware';
 
 export function createTPCCRoutes(tpcc: TPCCRunner): Router {
   const router = Router();
 
   /**
+   * 控制端点鉴权：要求有效会话（防止匿名触发压测/干扰）
+   */
+  const requireSession = (req: Request, res: Response, next: () => void): void => {
+    const sessionId = (req as SessionRequest).resolvedSessionId;
+    if (!sessionId) {
+      res.status(401).json({
+        code: ErrorCode.INVALID_SESSION,
+        message: 'Session ID is required',
+      });
+      return;
+    }
+    next();
+  };
+
+  /**
    * POST /api/v1/tpcc/start
-   * 启动 TPC-C 测试
+   * 启动 TPC-C 测试（需会话）
    * body: { scale: 'small'|'medium'|'large', durationSec?: number }
    */
-  router.post('/start', async (req: Request, res: Response) => {
+  router.post('/start', requireSession, async (req: Request, res: Response) => {
     try {
       const { scale, durationSec } = req.body as { scale?: string; durationSec?: number };
       if (!scale || !['small', 'medium', 'large'].includes(scale)) {
@@ -60,9 +76,9 @@ export function createTPCCRoutes(tpcc: TPCCRunner): Router {
 
   /**
    * POST /api/v1/tpcc/stop
-   * 手动停止测试
+   * 手动停止测试（需会话）
    */
-  router.post('/stop', (_req, res) => {
+  router.post('/stop', requireSession, (_req, res) => {
     const stopped = tpcc.stop();
     res.json({
       code: ErrorCode.SUCCESS,

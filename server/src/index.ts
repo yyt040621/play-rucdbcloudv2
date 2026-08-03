@@ -11,6 +11,7 @@ import { TPCCRunner } from './services/tpcc-runner';
 import { sessionMiddleware } from './middleware/session.middleware';
 import { createSqlGuardMiddleware } from './middleware/sql-guard.middleware';
 import { rateLimitMiddleware } from './middleware/rate-limit.middleware';
+import { securityHeadersMiddleware } from './middleware/security-headers.middleware';
 import { createRoutes } from './routes';
 
 async function main(): Promise<void> {
@@ -51,8 +52,24 @@ async function main(): Promise<void> {
   // 创建 Express 应用
   const app = express();
 
+  // 隐藏框架指纹
+  app.disable('x-powered-by');
+
+  // CORS 白名单（同源请求无 Origin 头 → 允许；开发前端 localhost:5173 放行）
+  const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost:5173')
+    .split(',').map((s) => s.trim()).filter(Boolean);
+  app.use(cors({
+    origin: (origin, cb) => {
+      if (!origin || allowedOrigins.includes(origin)) cb(null, true);
+      else cb(null, false); // 拒绝非白名单来源
+    },
+    credentials: true,
+  }));
+
+  // 安全响应头（CSP / X-Frame-Options / nosniff / Referrer-Policy / no-store）
+  app.use(securityHeadersMiddleware);
+
   // 全局中间件
-  app.use(cors());
   app.use(express.json({ limit: '20kb' })); // 限制请求体大小
   app.use(sessionMiddleware);
   app.use(rateLimitMiddleware);
