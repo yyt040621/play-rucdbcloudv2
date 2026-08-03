@@ -38,13 +38,13 @@ export function TestPage() {
     pollRef.current = setInterval(async () => {
       try {
         const s = await api.tpccStatus();
-        setStatus(s);
-        if (!s.running && pollRef.current) {
-          // 测试结束后停止轮询，刷新历史
-          clearInterval(pollRef.current);
-          pollRef.current = null;
-          api.tpccHistory().then(setHistory).catch(() => {});
-        }
+        // 检测到运行结束（之前 running → 现在 stopped），刷新历史
+        setStatus((prev) => {
+          if (prev?.running && !s.running) {
+            api.tpccHistory().then(setHistory).catch(() => {});
+          }
+          return s;
+        });
       } catch { /* 静默 */ }
     }, 2000);
 
@@ -195,8 +195,17 @@ export function TestPage() {
           <div className="p-5 border-b border-[var(--border-color)]">
             {!status || !status.running ? (
               <div className="text-center py-6 text-[var(--text-secondary)]">
-                <p className="text-sm">选择规模后点击「开始测试」</p>
-                <p className="text-xs mt-1 opacity-60">系统将自动建表、灌数据并运行 TPC-C 事务</p>
+                {status && status.ready ? (
+                  <>
+                    <p className="text-sm">✅ TPC-C 环境已就绪</p>
+                    <p className="text-xs mt-1 opacity-60">选择规模后点击「开始测试」，立即运行</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-sm">{status?.message || '正在准备 TPC-C 环境...'}</p>
+                    <p className="text-xs mt-1 opacity-60">首次加载需建表灌数据，请稍候</p>
+                  </>
+                )}
               </div>
             ) : (
               <div className="space-y-4">

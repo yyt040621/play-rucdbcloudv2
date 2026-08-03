@@ -120,6 +120,7 @@ class ApiService {
 
 export interface TPCStatus {
   running: boolean;
+  ready: boolean;
   scale: 'small' | 'medium' | 'large' | null;
   progress: number;
   elapsedSec: number;

@@ -40,6 +40,8 @@ async function main(): Promise<void> {
   const auditLogger = new AuditLogger(adapter);
   // TPC-C 性能测试服务（基于 adapter 抽象，未来可切换自研数据库）
   const tpccRunner = new TPCCRunner(adapter);
+  // 启动时预初始化 TPC-C 环境（建表+灌数据），用户点开始即可直接测试
+  tpccRunner.preInitialize();
 
   // 启动清理任务（清理时同步移除沙箱内存缓存，防止 Map 无限增长）
   const cleanupScheduler = new CleanupScheduler(adapter);

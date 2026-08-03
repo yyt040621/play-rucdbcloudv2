@@ -22,6 +22,7 @@ export interface TPCTransactionResult {
 
 export interface TPCStatus {
   running: boolean;
+  ready: boolean;         // 环境是否已预初始化
   scale: TPCScale | null;
   progress: number;       // 0-100
   elapsedSec: number;
@@ -66,12 +67,58 @@ export class TPCCRunner {
   private stopRequested = false;
   private status: TPCStatus = this.emptyStatus();
   private history: TPCHistoryEntry[] = [];
+  /** 已初始化的 warehouse 数量（预初始化 large=10，各规模都能用） */
+  private initializedWarehouses = 0;
+  /** 预初始化是否完成 */
+  private preInitDone = false;
+  /** 预初始化 Promise（避免并发重复初始化） */
+  private preInitPromise: Promise<void> | null = null;
 
   constructor(private adapter: IDatabaseAdapter) {}
+
+  /**
+   * 预初始化 TPC-C 环境（服务器启动时调用）。
+   * 一次性建好最大规模(large=10仓库)的数据，用户点开始即可直接测试。
+   */
+  preInitialize(): void {
+    if (this.preInitPromise) return;
+    this.status.message = '正在准备 TPC-C 环境...';
+    this.preInitPromise = (async () => {
+      try {
+        await this.initialize(SCALES.large, (msg, pct) => {
+          this.status.message = msg;
+          this.status.progress = Math.round(pct / 2); // 预初始化进度 0-50%
+        });
+        this.initializedWarehouses = SCALES.large;
+        this.preInitDone = true;
+        this.status.progress = 0;
+        this.status.message = 'TPC-C 环境已就绪，可以开始测试';
+      } catch (err) {
+        console.error('TPC-C pre-initialize failed:', err);
+        this.status.message = 'TPC-C 环境初始化失败';
+      }
+    })();
+  }
+
+  /** 等待预初始化完成（最多等待 N 秒） */
+  async waitReady(timeoutMs = 120000): Promise<boolean> {
+    if (this.preInitDone) return true;
+    const t0 = Date.now();
+    while (this.preInitPromise && !this.preInitDone) {
+      if (Date.now() - t0 > timeoutMs) return false;
+      await new Promise((r) => setTimeout(r, 500));
+    }
+    return this.preInitDone;
+  }
+
+  isReady(): boolean {
+    return this.preInitDone;
+  }
 
   private emptyStatus(): TPCStatus {
     return {
       running: false,
+      ready: this.preInitDone,
       scale: null,
       progress: 0,
       elapsedSec: 0,
@@ -88,7 +135,11 @@ export class TPCCRunner {
   }
 
   getStatus(): TPCStatus {
-    return { ...this.status, breakdown: this.status.breakdown.map((b) => ({ ...b })) };
+    return {
+      ...this.status,
+      ready: this.preInitDone,
+      breakdown: this.status.breakdown.map((b) => ({ ...b })),
+    };
   }
 
   getHistory(): TPCHistoryEntry[] {
@@ -112,7 +163,7 @@ export class TPCCRunner {
     this.status = this.emptyStatus();
     this.status.scale = scale;
     this.status.running = true;
-    this.status.message = '正在初始化 TPC-C 环境...';
+    this.status.message = '正在启动测试...';
 
     // 异步执行，不阻塞请求返回
     void this.run(scale, duration).catch((err) => {
@@ -136,9 +187,16 @@ export class TPCCRunner {
   private async run(scale: TPCScale, durationSec: number): Promise<void> {
     const W = SCALES[scale];
 
-    // 1. 初始化环境（建库、建表、灌数据）
-    this.status.message = '正在初始化 TPC-C 环境...';
-    await this.initialize(W);
+    // 1. 若预初始化完成且数据覆盖当前规模，跳过初始化直接测试
+    if (!this.preInitDone || this.initializedWarehouses < W) {
+      this.status.message = '正在初始化 TPC-C 环境...';
+      await this.initialize(W, (msg, pct) => {
+        this.status.message = msg;
+        this.status.progress = Math.round(pct / 2); // 初始化 0-50%
+      });
+      this.initializedWarehouses = Math.max(this.initializedWarehouses, W);
+      this.preInitDone = true;
+    }
 
     // 2. 并发跑事务
     this.status.message = '测试进行中...';
@@ -172,7 +230,7 @@ export class TPCCRunner {
   /**
    * 建库建表 + 灌入初始数据
    */
-  private async initialize(W: number): Promise<void> {
+  private async initialize(W: number, onProgress?: (msg: string, pct: number) => void): Promise<void> {
     await this.adapter.createDatabase(BENCH_DB);
     const db = BENCH_DB;
 
@@ -210,18 +268,34 @@ export class TPCCRunner {
       `CREATE TABLE ${db}.new_order (
         no_o_id INT, no_d_id INT, no_w_id INT, PRIMARY KEY (no_w_id, no_d_id, no_o_id))`,
     ];
-    for (const sql of ddl) {
-      await this.adapter.execute(sql);
+    for (let i = 0; i < ddl.length; i++) {
+      await this.adapter.execute(ddl[i]);
+      // 建表进度 5%~20%
+      const msg = `正在初始化 TPC-C 环境 (建表 ${i + 1}/${ddl.length})...`;
+      const pct = Math.round(5 + (i / ddl.length) * 15);
+      this.status.message = msg;
+      this.status.progress = pct;
+      onProgress?.(msg, pct);
     }
 
-    // 灌数据
-    await this.seedData(W);
+    // 灌数据（进度 20%~40%）
+    this.status.message = '正在灌入初始数据...';
+    this.status.progress = 20;
+    onProgress?.('正在灌入初始数据...', 20);
+    await this.seedData(W, (pct) => {
+      const msg = `正在灌入初始数据 (${pct}%)...`;
+      const progress = 20 + Math.round(pct * 0.2);
+      this.status.message = msg;
+      this.status.progress = progress;
+      onProgress?.(msg, progress);
+    });
   }
 
   /**
    * 灌入初始数据（按 warehouse 规模 W）
+   * @param onProgress 可选进度回调 (0-100)
    */
-  private async seedData(W: number): Promise<void> {
+  private async seedData(W: number, onProgress?: (pct: number) => void): Promise<void> {
     const db = BENCH_DB;
 
     // 1. warehouse
@@ -230,6 +304,7 @@ export class TPCCRunner {
       wRows.push(`(${w}, 'Warehouse_${w}', 'Street ${w}', 'City_${w}', 'CN', '10000', 0.10, 300000.00)`);
     }
     await this.adapter.execute(`INSERT INTO ${db}.warehouse VALUES ${wRows.join(',')}`);
+    onProgress?.(10);
 
     // 2. district (W × 10)
     const dRows: string[] = [];
@@ -239,6 +314,7 @@ export class TPCCRunner {
       }
     }
     await this.adapter.execute(`INSERT INTO ${db}.district VALUES ${dRows.join(',')}`);
+    onProgress?.(20);
 
     // 3. item (固定 1000)
     const iRows: string[] = [];
@@ -246,8 +322,9 @@ export class TPCCRunner {
       iRows.push(`(${i}, 'Item_${i}', ${(Math.random() * 90 + 10).toFixed(2)}, 'data${i}')`);
     }
     await this.adapter.execute(`INSERT INTO ${db}.item VALUES ${iRows.join(',')}`);
+    onProgress?.(30);
 
-    // 4. customer (W × 100) + history
+    // 4. customer (W × 100) + history — 逐 warehouse 灌入并汇报进度
     const cRows: string[] = [];
     const hRows: string[] = [];
     for (let w = 1; w <= W; w++) {
@@ -258,19 +335,22 @@ export class TPCCRunner {
           hRows.push(`(${c}, ${d}, ${w}, ${d}, ${w}, NOW(), 10.00, 'seed')`);
         }
       }
+      // 每完成一个 warehouse 汇报进度 (30%~70%)
+      onProgress?.(30 + Math.round((w / W) * 40));
     }
     // 分批插入避免 SQL 过长
     await this.batchInsert(cRows, 500, `INSERT INTO ${db}.customer VALUES`);
     await this.batchInsert(hRows, 500, `INSERT INTO ${db}.history VALUES`);
 
-    // 5. stock (W × 1000)
-    const sRows: string[] = [];
+    // 5. stock (W × 1000) — 逐 warehouse 灌入并汇报进度 (70%~100%)
     for (let w = 1; w <= W; w++) {
+      const sRows: string[] = [];
       for (let i = 1; i <= 1000; i++) {
         sRows.push(`(${i}, ${w}, 100, 'stock_${w}_${i}')`);
       }
+      await this.batchInsert(sRows, 500, `INSERT INTO ${db}.stock VALUES`);
+      onProgress?.(70 + Math.round((w / W) * 30));
     }
-    await this.batchInsert(sRows, 500, `INSERT INTO ${db}.stock VALUES`);
   }
 
   /**
@@ -339,7 +419,8 @@ export class TPCCRunner {
       this.status.totalTransactions = total;
       this.status.tpm = Math.round((total / Math.max(elapsed, 1)) * 60);
       this.status.avgLatencyMs = total > 0 ? Math.round(lat / total) : 0;
-      this.status.progress = Math.min(99, Math.round((elapsed / durationSec) * 100));
+      // 测试进度 50%~99%（初始化阶段已消耗 0-50%）
+      this.status.progress = Math.min(99, 50 + Math.round((elapsed / durationSec) * 49));
       // 更新 breakdown
       this.status.breakdown = TXN_WEIGHTS.map((t) => {
         const s = txnStats.get(t.name)!;
