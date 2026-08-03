@@ -1,6 +1,6 @@
 # SQL Playground
 
-> 在线 SQL 交互式演示平台 — 无需安装任何软件，打开浏览器即可体验完整的 MySQL 数据库操作。
+> 演示我们的 rucdbcloud — 在线 SQL 交互式演示平台，无需安装任何软件，打开浏览器即可体验完整的 MySQL 数据库操作。
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.5-blue)](https://www.typescriptlang.org/)
 [![React](https://img.shields.io/badge/React-18-61DAFB)](https://react.dev/)
