@@ -187,7 +187,8 @@ export class TPCCRunner {
   private async run(scale: TPCScale, durationSec: number): Promise<void> {
     const W = SCALES[scale];
 
-    // 1. 若预初始化完成且数据覆盖当前规模，跳过初始化直接测试
+    // 1. 是否跳过初始化（预初始化已就绪且覆盖当前规模）
+    let skippedInit = false;
     if (!this.preInitDone || this.initializedWarehouses < W) {
       this.status.message = '正在初始化 TPC-C 环境...';
       await this.initialize(W, (msg, pct) => {
@@ -196,11 +197,13 @@ export class TPCCRunner {
       });
       this.initializedWarehouses = Math.max(this.initializedWarehouses, W);
       this.preInitDone = true;
+    } else {
+      skippedInit = true;
     }
 
     // 2. 并发跑事务
     this.status.message = '测试进行中...';
-    await this.executeBenchmark(W, durationSec);
+    await this.executeBenchmark(W, durationSec, skippedInit);
 
     // 3. 汇总结果
     this.status.message = '测试完成';
@@ -366,7 +369,7 @@ export class TPCCRunner {
   /**
    * 并发执行 5 种事务，按标准比例混合
    */
-  private async executeBenchmark(W: number, durationSec: number): Promise<void> {
+  private async executeBenchmark(W: number, durationSec: number, skippedInit: boolean): Promise<void> {
     const startTime = Date.now();
     const targetEnd = startTime + durationSec * 1000;
 
@@ -419,8 +422,9 @@ export class TPCCRunner {
       this.status.totalTransactions = total;
       this.status.tpm = Math.round((total / Math.max(elapsed, 1)) * 60);
       this.status.avgLatencyMs = total > 0 ? Math.round(lat / total) : 0;
-      // 测试进度 50%~99%（初始化阶段已消耗 0-50%）
-      this.status.progress = Math.min(99, 50 + Math.round((elapsed / durationSec) * 49));
+      // 测试进度：跳过初始化则从 0 开始；否则从 50% 继续（初始化已占 0-50%）
+      const base = skippedInit ? 0 : 50;
+      this.status.progress = Math.min(99, base + Math.round((elapsed / durationSec) * (99 - base)));
       // 更新 breakdown
       this.status.breakdown = TXN_WEIGHTS.map((t) => {
         const s = txnStats.get(t.name)!;
