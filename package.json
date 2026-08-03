@@ -1,0 +1,25 @@
+{
+  "name": "sql-playground",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Online SQL interactive demo platform with isolated user sandboxes",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:server": "cd server && npm run dev",
+    "dev:client": "cd client && npm run dev",
+    "build": "npm run build:server && npm run build:client",
+    "build:server": "cd server && npm run build",
+    "build:client": "cd client && npm run build",
+    "test": "npm run test:server && npm run test:client",
+    "test:server": "cd server && npm test",
+    "test:client": "cd client && npm test",
+    "db:init": "mysql -u root -p < server/init.sql",
+    "postinstall": "cd server && npm install && cd ../client && npm install"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.0"
+  },
+  "dependencies": {
+    "ssh2": "^1.17.0"
+  }
+}

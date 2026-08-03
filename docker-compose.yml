@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: sqlplayground-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./server/init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - '3306:3306'
+    healthcheck:
+      test: ['CMD', 'mysqladmin', 'ping', '-h', 'localhost']
+      interval: 10s
+      retries: 5
+    restart: unless-stopped
+
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: sqlplayground-server
+    environment:
+      NODE_ENV: production
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_USER: playground
+      DB_PASSWORD: ${MYSQL_PASSWORD:-playground_pass}
+      DB_ADMIN_DATABASE: playground_admin
+      DB_TEMPLATE_DATABASE: playground_template
+      SESSION_TTL_HOURS: ${SESSION_TTL_HOURS:-24}
+      PORT: 3001
+      MAX_ROWS_PER_QUERY: 1000
+      MAX_DB_SIZE_MB: 100
+      MAX_TABLES_PER_USER: 50
+      RATE_LIMIT_PER_MINUTE: 30
+      QUERY_TIMEOUT_SECONDS: 30
+      CLEANUP_INTERVAL_MINUTES: 30
+    ports:
+      - '3001:3001'
+    depends_on:
+      mysql:
+        condition: service_healthy
+    restart: unless-stopped
+
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    container_name: sqlplayground-client
+    ports:
+      - '80:80'
+    depends_on:
+      - server
+    restart: unless-stopped
+
+volumes:
+  mysql_data:
