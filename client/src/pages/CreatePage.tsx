@@ -142,18 +142,23 @@ export function CreatePage({ theme, tables, onRefreshTables }: CreatePageProps) 
     return errors;
   };
 
+  // 生成单列定义（整数主键自动加 AUTO_INCREMENT，插入时自动生成）
+  const buildColumnDef = useCallback((f: FieldDef): string => {
+    let col = `  \`${f.name}\` ${f.type}`;
+    const isIntType = /INT|BIGINT|SMALLINT|TINYINT/.test(f.type);
+    if (f.isPrimary && isIntType) col += ' AUTO_INCREMENT';
+    if (f.notNull) col += ' NOT NULL';
+    if (f.isPrimary) col += ' PRIMARY KEY';
+    return col;
+  }, []);
+
   // 生成当前 Tab 的 SQL
   const buildSQL = useCallback(() => {
     if (formTab === 'build') {
       if (!tableName.trim()) return '';
       const cols = fields
         .filter((f) => f.name.trim())
-        .map((f) => {
-          let col = `  \`${f.name}\` ${f.type}`;
-          if (f.notNull) col += ' NOT NULL';
-          if (f.isPrimary) col += ' PRIMARY KEY';
-          return col;
-        });
+        .map((f) => buildColumnDef(f));
       if (cols.length === 0) return '';
       return `CREATE TABLE IF NOT EXISTS \`${tableName}\` (\n${cols.join(',\n')}\n);`;
     } else {
@@ -173,12 +178,7 @@ export function CreatePage({ theme, tables, onRefreshTables }: CreatePageProps) 
 
     const cols = fields
       .filter((f) => f.name.trim())
-      .map((f) => {
-        let col = `  \`${f.name}\` ${f.type}`;
-        if (f.notNull) col += ' NOT NULL';
-        if (f.isPrimary) col += ' PRIMARY KEY';
-        return col;
-      });
+      .map((f) => buildColumnDef(f));
     if (cols.length === 0) return;
     const query = `CREATE TABLE IF NOT EXISTS \`${tableName}\` (\n${cols.join(',\n')}\n);`;
     setSql(query);
@@ -193,7 +193,7 @@ export function CreatePage({ theme, tables, onRefreshTables }: CreatePageProps) 
       onRefreshTables();
       fetchTables();
     }
-  }, [tableName, fields, execute, onRefreshTables, fetchTables]);
+  }, [tableName, fields, buildColumnDef, execute, onRefreshTables, fetchTables]);
 
   // 插入数据-执行
   const handleInsert = useCallback(async () => {
