@@ -130,9 +130,12 @@ export function CreatePage({ theme, tables, onRefreshTables }: CreatePageProps) 
           break;
         }
       }
-      // 5. 主键
-      if (!validCols.some((f) => f.isPrimary)) {
+      // 5. 主键：至少一个，且最多一个（MySQL 单列主键只能一个）
+      const primaryCols = validCols.filter((f) => f.isPrimary);
+      if (primaryCols.length === 0) {
         errors.push('请至少选择一个主键（点击 PK 按钮）');
+      } else if (primaryCols.length > 1) {
+        errors.push('只能选择一个主键（当前选中多个 PK，请只保留一个）');
       }
     }
 
@@ -424,7 +427,8 @@ export function CreatePage({ theme, tables, onRefreshTables }: CreatePageProps) 
 
                     <button
                       onClick={handleInsert}
-                      disabled={isLoading || Object.values(colValues).filter((v) => v.trim()).length === 0}
+                      disabled={isLoading || insertCols.length === 0 ||
+                        Object.values(colValues).filter((v) => v.trim()).length === 0}
                       className="w-full px-4 py-2.5 text-sm font-medium rounded-lg text-white
                         bg-[var(--accent)] hover:bg-[var(--accent-hover)] transition-all
                         disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shadow-sm"

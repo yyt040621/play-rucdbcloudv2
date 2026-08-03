@@ -61,6 +61,16 @@ export function ColumnValueForm({
   const fillColumns = columns.filter((c) => !skipNames.has(c.name));
   const autoNames = columns.filter((c) => skipNames.has(c.name)).map((c) => c.name);
 
+  // 表无可用字段（不存在或无列）时显示提示，避免空白/残留
+  if (columns.length === 0) {
+    return (
+      <div className="text-xs text-[var(--text-secondary)] px-3 py-4 text-center rounded-lg
+        border border-dashed border-[var(--border-color)]">
+        该表无可用字段或不存在，请先建表
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-2.5">
       {/* 自动列提示 */}
