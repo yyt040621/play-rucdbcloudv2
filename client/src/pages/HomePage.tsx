@@ -1,46 +1,30 @@
 import { useNavigate } from 'react-router-dom';
 
-interface CardProps {
+interface EntryCardProps {
   title: string;
   description: string;
   icon: string;
   color: string;
   path: string;
-  examples: string[];
+  features: string[];
 }
 
-const CARDS: CardProps[] = [
+const ENTRIES: EntryCardProps[] = [
   {
-    title: 'SELECT',
-    description: '查询数据',
-    icon: '🔍',
+    title: '性能测试',
+    description: 'TPC-C 数据库基准测试',
+    icon: '⚡',
+    color: '#8B5CF6',
+    path: '/test',
+    features: ['TPC-C 标准事务', '实时 TPM 统计', '多规模可选'],
+  },
+  {
+    title: '功能演示',
+    description: '体验完整的 SQL 数据库操作',
+    icon: '🎮',
     color: '#3B82F6',
-    path: '/select',
-    examples: ['筛选员工', '表关联查询', '排序与分组'],
-  },
-  {
-    title: 'CREATE',
-    description: '创建表 / 插入数据',
-    icon: '➕',
-    color: '#10B981',
-    path: '/create',
-    examples: ['建表向导', '添加字段', '插入新记录'],
-  },
-  {
-    title: 'UPDATE',
-    description: '修改数据',
-    icon: '✏️',
-    color: '#F59E0B',
-    path: '/update',
-    examples: ['修改薪资', '批量更新', '条件更新'],
-  },
-  {
-    title: 'DELETE',
-    description: '删除数据',
-    icon: '🗑️',
-    color: '#EF4444',
-    path: '/delete',
-    examples: ['条件删除', '清理数据', '删除表'],
+    path: '/demo',
+    features: ['表单 + SQL 双模式', '多用户沙箱', '安全隔离'],
   },
 ];
 
@@ -62,58 +46,51 @@ export function HomePage() {
           SQL Playground
         </h1>
         <p className="text-sm text-[var(--text-secondary)] max-w-md mx-auto leading-relaxed">
-          在线 SQL 交互式体验平台。选择下方操作类型开始体验，无需安装任何软件。
+          演示我们的 rucdbcloud — 数据库性能测试与交互式操作体验平台。
         </p>
       </div>
 
-      {/* 四个卡片 */}
-      <div className="grid grid-cols-2 gap-4 max-w-xl mx-auto px-4 pb-10">
-        {CARDS.map((card) => (
+      {/* 两个入口卡片 */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-lg mx-auto px-4 pb-10 w-full">
+        {ENTRIES.map((entry) => (
           <button
-            key={card.path}
-            onClick={() => navigate(card.path)}
-            className="group relative flex flex-col items-center p-6 rounded-2xl border-2
+            key={entry.path}
+            onClick={() => navigate(entry.path)}
+            className="group relative flex flex-col items-center p-7 rounded-2xl border-2
               border-[var(--border-color)] bg-[var(--bg-secondary)]
               hover:border-[var(--accent)]/50 hover:shadow-lg
               hover:-translate-y-0.5 transition-all duration-200 cursor-pointer
               text-center"
           >
-            {/* 顶部色条 */}
             <div
-              className="absolute top-0 left-4 right-4 h-1 rounded-b-full opacity-50"
-              style={{ backgroundColor: card.color }}
+              className="absolute top-0 left-4 right-4 h-1.5 rounded-b-full opacity-50"
+              style={{ backgroundColor: entry.color }}
             />
-
-            {/* 图标 */}
             <div
-              className="w-12 h-12 rounded-xl flex items-center justify-center text-2xl mb-3 mt-2"
-              style={{ backgroundColor: card.color + '18' }}
+              className="w-16 h-16 rounded-2xl flex items-center justify-center text-3xl mb-4 mt-3"
+              style={{ backgroundColor: entry.color + '18' }}
             >
-              {card.icon}
+              {entry.icon}
             </div>
-
-            {/* 标题 */}
             <h3
-              className="text-sm font-bold mb-1"
-              style={{ color: card.color }}
+              className="text-base font-bold mb-1.5"
+              style={{ color: entry.color }}
             >
-              {card.title}
+              {entry.title}
             </h3>
-            <p className="text-xs text-[var(--text-secondary)] mb-3">
-              {card.description}
+            <p className="text-xs text-[var(--text-secondary)] mb-4">
+              {entry.description}
             </p>
-
-            {/* 示例标签 */}
-            <div className="flex flex-wrap gap-1 justify-center">
-              {card.examples.map((ex) => (
+            <div className="flex flex-wrap gap-1.5 justify-center">
+              {entry.features.map((f) => (
                 <span
-                  key={ex}
-                  className="px-2 py-0.5 text-[10px] rounded-full
+                  key={f}
+                  className="px-2.5 py-1 text-[11px] rounded-full
                     border border-[var(--border-color)] text-[var(--text-secondary)]
                     group-hover:border-[var(--accent)]/30 group-hover:text-[var(--text-primary)]
                     transition-colors"
                 >
-                  {ex}
+                  {f}
                 </span>
               ))}
             </div>
@@ -121,9 +98,8 @@ export function HomePage() {
         ))}
       </div>
 
-      {/* 底部提示 */}
       <p className="text-xs text-[var(--text-secondary)] pb-6">
-        每个操作类型都支持 📝<strong>表单模式</strong>（无需写 SQL）和 ⚡<strong>SQL 模式</strong>
+        选择上方入口开始体验
       </p>
     </div>
   );

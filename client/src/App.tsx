@@ -9,6 +9,8 @@ import { SelectPage } from './pages/SelectPage';
 import { UpdatePage } from './pages/UpdatePage';
 import { DeletePage } from './pages/DeletePage';
 import { HomePage } from './pages/HomePage';
+import { TestPage } from './pages/TestPage';
+import { DemoPage } from './pages/DemoPage';
 import { useSession } from './hooks/useSession';
 import { useTheme } from './hooks/useTheme';
 import { useSchema } from './hooks/useSchema';
@@ -112,6 +114,8 @@ export default function App() {
       <div className="flex-1 overflow-hidden">
         <Routes>
           <Route path="/" element={<HomePage />} />
+          <Route path="/test" element={<TestPage />} />
+          <Route path="/demo" element={<DemoPage />} />
           <Route path="/create" element={
             <CreatePage theme={theme} tables={tables} onRefreshTables={handleRefreshTables} />
           } />

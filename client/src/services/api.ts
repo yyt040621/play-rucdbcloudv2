@@ -90,6 +90,61 @@ class ApiService {
     );
     return res.data.data!.logs;
   }
+
+  // === TPC-C ===
+
+  async tpccStart(scale: string, durationSec: number): Promise<TPCStatus> {
+    const res = await this.client.post<ApiResponse<{ status: TPCStatus }>>(
+      '/tpcc/start', { scale, durationSec }
+    );
+    return res.data.data!.status;
+  }
+
+  async tpccStatus(): Promise<TPCStatus> {
+    const res = await this.client.get<ApiResponse<TPCStatus>>('/tpcc/status');
+    return res.data.data!;
+  }
+
+  async tpccHistory(): Promise<TPCHistoryEntry[]> {
+    const res = await this.client.get<ApiResponse<{ history: TPCHistoryEntry[] }>>('/tpcc/history');
+    return res.data.data!.history;
+  }
+
+  async tpccStop(): Promise<boolean> {
+    const res = await this.client.post<ApiResponse<{ stopped: boolean }>>('/tpcc/stop');
+    return res.data.data!.stopped;
+  }
+}
+
+// === TPC-C 类型 ===
+
+export interface TPCStatus {
+  running: boolean;
+  scale: 'small' | 'medium' | 'large' | null;
+  progress: number;
+  elapsedSec: number;
+  totalTransactions: number;
+  tpm: number;
+  avgLatencyMs: number;
+  breakdown: TPCTransactionResult[];
+  message: string | null;
+}
+
+export interface TPCTransactionResult {
+  name: string;
+  count: number;
+  avgLatencyMs: number;
+}
+
+export interface TPCHistoryEntry {
+  id: string;
+  scale: 'small' | 'medium' | 'large';
+  durationSec: number;
+  warehouse: number;
+  totalTransactions: number;
+  tpm: number;
+  avgLatencyMs: number;
+  finishedAt: string;
 }
 
 export interface QueryLogEntry {

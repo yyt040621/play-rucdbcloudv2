@@ -2,10 +2,12 @@ import { Router } from 'express';
 import { createSessionRoutes } from './session.routes';
 import { createQueryRoutes } from './query.routes';
 import { createSchemaRoutes } from './schema.routes';
+import { createTPCCRoutes } from './tpcc.routes';
 import { SandboxManager } from '../services/sandbox-manager';
 import { SqlExecutor } from '../services/sql-executor';
 import { CleanupScheduler } from '../services/cleanup-scheduler';
 import { AuditLogger } from '../services/audit-logger';
+import { TPCCRunner } from '../services/tpcc-runner';
 import { IDatabaseAdapter } from '../adapters/database-adapter.interface';
 
 export function createRoutes(
@@ -13,7 +15,8 @@ export function createRoutes(
   sandboxManager: SandboxManager,
   sqlExecutor: SqlExecutor,
   auditLogger: AuditLogger,
-  cleanupScheduler: CleanupScheduler
+  cleanupScheduler: CleanupScheduler,
+  tpccRunner: TPCCRunner
 ): Router {
   const router = Router();
 
@@ -21,6 +24,7 @@ export function createRoutes(
   router.use('/session', createSessionRoutes(sandboxManager));
   router.use('/query', createQueryRoutes(sqlExecutor, sandboxManager, adapter, auditLogger));
   router.use('/schema', createSchemaRoutes(adapter, sandboxManager));
+  router.use('/tpcc', createTPCCRoutes(tpccRunner));
 
   // Health check
   router.get('/health', (_req, res) => {

@@ -7,6 +7,7 @@ import { SqlExecutor } from './services/sql-executor';
 import { CleanupScheduler } from './services/cleanup-scheduler';
 import { TemplateLoader } from './services/template-loader';
 import { AuditLogger } from './services/audit-logger';
+import { TPCCRunner } from './services/tpcc-runner';
 import { sessionMiddleware } from './middleware/session.middleware';
 import { sqlGuardMiddleware } from './middleware/sql-guard.middleware';
 import { rateLimitMiddleware } from './middleware/rate-limit.middleware';
@@ -37,6 +38,8 @@ async function main(): Promise<void> {
   const sandboxManager = new SandboxManager(adapter);
   const sqlExecutor = new SqlExecutor(adapter);
   const auditLogger = new AuditLogger(adapter);
+  // TPC-C 性能测试服务（基于 adapter 抽象，未来可切换自研数据库）
+  const tpccRunner = new TPCCRunner(adapter);
 
   // 启动清理任务（清理时同步移除沙箱内存缓存，防止 Map 无限增长）
   const cleanupScheduler = new CleanupScheduler(adapter);
@@ -56,7 +59,7 @@ async function main(): Promise<void> {
   app.use('/api/v1/query', sqlGuardMiddleware);
 
   // 挂载路由
-  const routes = createRoutes(adapter, sandboxManager, sqlExecutor, auditLogger, cleanupScheduler);
+  const routes = createRoutes(adapter, sandboxManager, sqlExecutor, auditLogger, cleanupScheduler, tpccRunner);
   app.use('/api/v1', routes);
 
   // 全局错误处理

@@ -10,10 +10,9 @@ interface HeaderProps {
 }
 
 const NAV_ITEMS = [
-  { path: '/create', label: 'CREATE', icon: '＋' },
-  { path: '/select', label: 'SELECT', icon: '🔍' },
-  { path: '/update', label: 'UPDATE', icon: '✏️' },
-  { path: '/delete', label: 'DELETE', icon: '🗑' },
+  { path: '/', label: '首页', icon: '🏠' },
+  { path: '/test', label: '测试', icon: '⚡' },
+  { path: '/demo', label: '演示', icon: '🎮' },
 ];
 
 export function Header({ theme, onToggleTheme, onReset, isResetting }: HeaderProps) {
