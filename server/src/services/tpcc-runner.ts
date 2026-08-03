@@ -430,7 +430,7 @@ export class TPCCRunner {
           avgLatencyMs: s.count > 0 ? Math.round(s.totalLatency / s.count) : 0,
         };
       });
-    }, 1000);
+    }, 200); // 200ms ≈ 5Hz 进度刷新
 
     // 启动并发工作器
     const workers = Array.from({ length: concurrency }, () => worker());

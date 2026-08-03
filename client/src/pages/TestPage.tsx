@@ -46,7 +46,7 @@ export function TestPage() {
           return s;
         });
       } catch { /* 静默 */ }
-    }, 2000);
+    }, 200); // 200ms ≈ 5Hz 轮询
 
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
