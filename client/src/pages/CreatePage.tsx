@@ -179,9 +179,17 @@ export function CreatePage({ theme, tables, onRefreshTables }: CreatePageProps) 
     if (cols.length === 0) return;
     const query = `CREATE TABLE IF NOT EXISTS \`${tableName}\` (\n${cols.join(',\n')}\n);`;
     setSql(query);
-    await execute(query);
-    onRefreshTables();
-    fetchTables();
+    const execResults = await execute(query);
+    if (execResults) {
+      const hasError = execResults.some((r) => r.type === 'error');
+      if (!hasError) {
+        // 建表成功 → 自动切到「插入数据」tab 并选中新表，方便直接插入
+        setInsertTable(tableName);
+        setFormTab('insert');
+      }
+      onRefreshTables();
+      fetchTables();
+    }
   }, [tableName, fields, execute, onRefreshTables, fetchTables]);
 
   // 插入数据-执行
@@ -392,6 +400,10 @@ export function CreatePage({ theme, tables, onRefreshTables }: CreatePageProps) 
                           border-[var(--border-color)] bg-[var(--bg-primary)]
                           text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent)]"
                       >
+                        {/* 当前选中的表（即使 tables 尚未刷新也显示） */}
+                        {!tables.some((t) => t.name === insertTable) && (
+                          <option value={insertTable}>{insertTable}</option>
+                        )}
                         {tables.map((t) => <option key={t.name} value={t.name}>{t.name}</option>)}
                       </select>
                     </div>
