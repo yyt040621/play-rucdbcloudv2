@@ -9,8 +9,7 @@ services:
     volumes:
       - mysql_data:/var/lib/mysql
       - ./server/init.sql:/docker-entrypoint-initdb.d/init.sql
-    ports:
-      - '3306:3306'
+    # 不对外暴露 3306（server 通过 Docker 内网 mysql 服务名访问）
     healthcheck:
       test: ['CMD', 'mysqladmin', 'ping', '-h', 'localhost']
       interval: 10s
@@ -26,8 +25,8 @@ services:
       NODE_ENV: production
       DB_HOST: mysql
       DB_PORT: 3306
-      DB_USER: playground
-      DB_PASSWORD: ${MYSQL_PASSWORD:-playground_pass}
+      DB_USER: root
+      DB_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       DB_ADMIN_DATABASE: playground_admin
       DB_TEMPLATE_DATABASE: playground_template
       SESSION_TTL_HOURS: ${SESSION_TTL_HOURS:-24}
@@ -35,7 +34,7 @@ services:
       MAX_ROWS_PER_QUERY: 1000
       MAX_DB_SIZE_MB: 100
       MAX_TABLES_PER_USER: 50
-      RATE_LIMIT_PER_MINUTE: 30
+      RATE_LIMIT_PER_MINUTE: 300
       QUERY_TIMEOUT_SECONDS: 30
       CLEANUP_INTERVAL_MINUTES: 30
     ports:
@@ -51,7 +50,7 @@ services:
       dockerfile: Dockerfile
     container_name: sqlplayground-client
     ports:
-      - '80:80'
+      - '8080:80'
     depends_on:
       - server
     restart: unless-stopped

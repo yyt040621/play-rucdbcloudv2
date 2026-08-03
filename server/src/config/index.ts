@@ -26,7 +26,7 @@ export const config = {
     maxDbSizeMB: parseInt(process.env.MAX_DB_SIZE_MB || '100', 10),
     maxTablesPerUser: parseInt(process.env.MAX_TABLES_PER_USER || '50', 10),
     maxSqlLengthKB: parseInt(process.env.MAX_SQL_LENGTH_KB || '10', 10),
-    rateLimitPerMinute: parseInt(process.env.RATE_LIMIT_PER_MINUTE || '30', 10),
+    rateLimitPerMinute: parseInt(process.env.RATE_LIMIT_PER_MINUTE || '300', 10),
     queryTimeoutSeconds: parseInt(process.env.QUERY_TIMEOUT_SECONDS || '30', 10),
   },
 
