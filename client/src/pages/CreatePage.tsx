@@ -49,6 +49,8 @@ export function CreatePage({ theme, tables, onRefreshTables }: CreatePageProps) 
   ]);
   // 建表校验错误提示
   const [buildError, setBuildError] = useState<string | null>(null);
+  // 建表警告提示（不阻止，如只有主键列）
+  const [buildWarning, setBuildWarning] = useState<string | null>(null);
 
   // 插入数据表单
   const [insertTable, setInsertTable] = useState('employees');
@@ -70,12 +72,14 @@ export function CreatePage({ theme, tables, onRefreshTables }: CreatePageProps) 
       { id: ++fieldId, name: '', type: 'VARCHAR(50)', notNull: false, isPrimary: false },
     ]);
     setBuildError(null);
+    setBuildWarning(null);
   };
 
   // 建表-更新字段
   const updateField = (id: number, key: keyof FieldDef, val: string | boolean) => {
     setFields(fields.map((f) => (f.id === id ? { ...f, [key]: val } : f)));
     setBuildError(null);
+    setBuildWarning(null);
   };
 
   // 建表-移除字段
@@ -83,6 +87,7 @@ export function CreatePage({ theme, tables, onRefreshTables }: CreatePageProps) 
     if (fields.length <= 1) return;
     setFields(fields.filter((f) => f.id !== id));
     setBuildError(null);
+    setBuildWarning(null);
   };
 
   // 切换主键（单选：设某列为主键时，其他列取消主键；主键强制 NOT NULL）
@@ -95,6 +100,7 @@ export function CreatePage({ theme, tables, onRefreshTables }: CreatePageProps) 
       return { ...f, isPrimary: false };
     }));
     setBuildError(null);
+    setBuildWarning(null);
   };
 
   // 校验建表表单，返回错误数组（空 = 通过）
@@ -175,6 +181,7 @@ export function CreatePage({ theme, tables, onRefreshTables }: CreatePageProps) 
       return;
     }
     setBuildError(null);
+    setBuildWarning(null);
 
     // 检查表是否已存在（避免静默覆盖）
     const exists = tables.some((t) => t.name === tableName);
@@ -182,6 +189,15 @@ export function CreatePage({ theme, tables, onRefreshTables }: CreatePageProps) 
       setBuildError(`表 "${tableName}" 已存在。请使用其他表名，或先删除该表再重建`);
       return;
     }
+
+    // 提示：只有主键列、无业务字段时给出警告（不阻止）
+    const validCols = fields.filter((f) => f.name.trim());
+    const hasBusinessCol = validCols.some((f) => !f.isPrimary);
+    setBuildWarning(
+      !hasBusinessCol
+        ? '提示：该表只有主键列，没有业务字段。通常建议至少添加一个普通字段（如名称、描述等）'
+        : null
+    );
 
     const cols = fields
       .filter((f) => f.name.trim())
@@ -352,6 +368,16 @@ export function CreatePage({ theme, tables, onRefreshTables }: CreatePageProps) 
                         + 添加字段
                       </button>
                     </div>
+
+                    {/* 建表警告提示（不阻止） */}
+                    {buildWarning && (
+                      <div className="px-3 py-2.5 text-xs rounded-lg
+                        bg-yellow-500/10 border border-yellow-500/40 text-yellow-500
+                        flex items-start gap-2">
+                        <span>💡</span>
+                        <span>{buildWarning}</span>
+                      </div>
+                    )}
 
                     {/* 建表错误提示 */}
                     {buildError && (
