@@ -51,10 +51,11 @@ export function ColumnValueForm({
   if (!tableName) return null;
   if (loading) return <div className="text-xs text-[var(--text-secondary)] p-3">加载列信息...</div>;
 
-  // 自动跳过的主键/自增列
+  // 自动跳过的列：仅自增列（auto_increment）会自动生成。
+  // 普通主键（如字符串主键）需要用户填值，不跳过。
   const skipNames = new Set(excludeColumns);
   for (const c of columns) {
-    if (c.extra?.includes('auto_increment') || c.key === 'PRI') {
+    if (c.extra?.includes('auto_increment')) {
       skipNames.add(c.name);
     }
   }
