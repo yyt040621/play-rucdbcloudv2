@@ -92,10 +92,11 @@ export function createQueryRoutes(
         message: 'ok',
       });
     } catch (err) {
+      // 不向客户端泄露内部错误详情，仅记录日志
       console.error('Query execution error:', err);
       res.status(500).json({
         code: ErrorCode.INTERNAL_ERROR,
-        message: err instanceof Error ? err.message : 'Internal server error',
+        message: 'Internal server error',
       });
     }
   });

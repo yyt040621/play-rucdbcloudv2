@@ -1,19 +1,21 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, lazy, Suspense } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { Header } from './components/layout/Header';
 import { Toast } from './components/common/Toast';
 import { LoadingOverlay } from './components/common/Loading';
 import { ConfirmDialog } from './components/common/ConfirmDialog';
-import { CreatePage } from './pages/CreatePage';
-import { SelectPage } from './pages/SelectPage';
-import { UpdatePage } from './pages/UpdatePage';
-import { DeletePage } from './pages/DeletePage';
-import { HomePage } from './pages/HomePage';
-import { TestPage } from './pages/TestPage';
-import { DemoPage } from './pages/DemoPage';
 import { useSession } from './hooks/useSession';
 import { useTheme } from './hooks/useTheme';
 import { useSchema } from './hooks/useSchema';
+
+// 路由级代码分割（减小首屏 bundle，按需加载页面）
+const HomePage = lazy(() => import('./pages/HomePage').then((m) => ({ default: m.HomePage })));
+const TestPage = lazy(() => import('./pages/TestPage').then((m) => ({ default: m.TestPage })));
+const DemoPage = lazy(() => import('./pages/DemoPage').then((m) => ({ default: m.DemoPage })));
+const CreatePage = lazy(() => import('./pages/CreatePage').then((m) => ({ default: m.CreatePage })));
+const SelectPage = lazy(() => import('./pages/SelectPage').then((m) => ({ default: m.SelectPage })));
+const UpdatePage = lazy(() => import('./pages/UpdatePage').then((m) => ({ default: m.UpdatePage })));
+const DeletePage = lazy(() => import('./pages/DeletePage').then((m) => ({ default: m.DeletePage })));
 
 interface ToastMessage {
   id: number;
@@ -112,7 +114,8 @@ export default function App() {
       />
 
       <div className="flex-1 overflow-hidden">
-        <Routes>
+        <Suspense fallback={<LoadingOverlay message="加载中..." />}>
+          <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/test" element={<TestPage />} />
           <Route path="/demo" element={<DemoPage />} />
@@ -129,7 +132,8 @@ export default function App() {
             <DeletePage theme={theme} onRefreshTables={handleRefreshTables} />
           } />
           <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+          </Routes>
+        </Suspense>
       </div>
 
       <ConfirmDialog

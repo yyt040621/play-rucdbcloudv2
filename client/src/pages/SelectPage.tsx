@@ -139,6 +139,7 @@ export function SelectPage({ theme, tables }: SelectPageProps) {
                   选择表
                 </label>
                 <select
+                  aria-label="选择查询表"
                   value={selectedTable}
                   onChange={(e) => setSelectedTable(e.target.value)}
                   className="w-full mt-1.5 px-3 py-2 text-sm rounded-lg border cursor-pointer

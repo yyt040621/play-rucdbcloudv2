@@ -130,6 +130,7 @@ export function WhereConditionBuilder({
           {/* 值 */}
           <input
             type="text"
+            aria-label={`条件 ${i + 1} 的值`}
             value={cond.value}
             onChange={(e) => update(cond.id, 'value', e.target.value)}
             placeholder="值"
@@ -143,6 +144,7 @@ export function WhereConditionBuilder({
           <button
             onClick={() => remove(cond.id)}
             disabled={conditions.length <= 1}
+            aria-label="删除条件"
             className="p-1 text-[var(--text-secondary)] hover:text-[var(--error)]
               disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer shrink-0"
           >
