@@ -9,7 +9,7 @@ import { TemplateLoader } from './services/template-loader';
 import { AuditLogger } from './services/audit-logger';
 import { TPCCRunner } from './services/tpcc-runner';
 import { sessionMiddleware } from './middleware/session.middleware';
-import { sqlGuardMiddleware } from './middleware/sql-guard.middleware';
+import { createSqlGuardMiddleware } from './middleware/sql-guard.middleware';
 import { rateLimitMiddleware } from './middleware/rate-limit.middleware';
 import { createRoutes } from './routes';
 
@@ -58,7 +58,7 @@ async function main(): Promise<void> {
   app.use(rateLimitMiddleware);
 
   // SQL 安全检查（仅对 /query 路由生效）
-  app.use('/api/v1/query', sqlGuardMiddleware);
+  app.use('/api/v1/query', createSqlGuardMiddleware(sandboxManager));
 
   // 挂载路由
   const routes = createRoutes(adapter, sandboxManager, sqlExecutor, auditLogger, cleanupScheduler, tpccRunner);

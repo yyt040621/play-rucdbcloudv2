@@ -281,17 +281,17 @@ describe('checkSqlAllowed — 受保护表', () => {
 // checkSqlAllowed — USE 限制
 // ============================================================
 describe('checkSqlAllowed — USE 限制', () => {
-  it('允许 USE sandbox_xxx', () => {
-    expect(checkSqlAllowed('USE sandbox_abc123')).toBeNull();
+  it('允许 USE 当前会话沙箱库', () => {
+    expect(checkSqlAllowed('USE sandbox_abc123', 'sandbox_abc123')).toBeNull();
   });
 
   it('禁止 USE 其他数据库', () => {
-    const result = checkSqlAllowed('USE mysql');
+    const result = checkSqlAllowed('USE mysql', 'sandbox_abc123');
     expect(result).toContain('sandbox');
   });
 
-  it('禁止 USE playground_admin', () => {
-    const result = checkSqlAllowed('USE playground_admin');
+  it('禁止 USE 其他用户的沙箱库', () => {
+    const result = checkSqlAllowed('USE sandbox_other', 'sandbox_abc123');
     expect(result).toContain('sandbox');
   });
 });
@@ -358,43 +358,95 @@ describe('SQL 安全边界测试', () => {
 // ============================================================
 // 越权访问防护（新增安全修复）
 // ============================================================
+// 库名绑定与越权访问防护
+// 测试统一传入当前会话沙箱库 sandbox_current_abc
+// ============================================================
 describe('数据库越权访问防护', () => {
+  const CUR = 'sandbox_current_abc';
+
   it('禁止访问 playground_admin 库', () => {
-    const result = checkSqlAllowed('SELECT * FROM playground_admin.sandboxes');
+    const result = checkSqlAllowed('SELECT * FROM playground_admin.sandboxes', CUR);
     expect(result).toContain('Cannot access database');
   });
 
   it('禁止访问 playground_template 库', () => {
-    const result = checkSqlAllowed('SELECT * FROM playground_template.employees');
+    const result = checkSqlAllowed('SELECT * FROM playground_template.employees', CUR);
     expect(result).toContain('Cannot access database');
   });
 
   it('禁止修改模板库', () => {
-    const result = checkSqlAllowed("UPDATE playground_template.employees SET salary=1");
+    const result = checkSqlAllowed("UPDATE playground_template.employees SET salary=1", CUR);
     expect(result).toContain('Cannot access database');
   });
 
   it('禁止删除审计日志', () => {
-    const result = checkSqlAllowed('DELETE FROM playground_admin.query_logs');
+    const result = checkSqlAllowed('DELETE FROM playground_admin.query_logs', CUR);
     expect(result).toContain('Cannot access database');
   });
 
   it('禁止 DROP 管理库表', () => {
-    const result = checkSqlAllowed('DROP TABLE playground_admin.sandboxes');
+    const result = checkSqlAllowed('DROP TABLE playground_admin.sandboxes', CUR);
     expect(result).toContain('Cannot access database');
   });
 
-  it('允许访问 sandbox 库', () => {
-    expect(checkSqlAllowed('SELECT * FROM sandbox_abc123.my_table')).toBeNull();
+  it('禁止访问其他用户的沙箱库（跨租户）', () => {
+    const result = checkSqlAllowed('SELECT * FROM sandbox_other_user.employees', CUR);
+    expect(result).toContain('other user');
   });
 
-  it('允许访问反引号包裹的 sandbox 库', () => {
-    expect(checkSqlAllowed('SELECT * FROM `sandbox_abc123`.`my_table`')).toBeNull();
+  it('允许访问当前会话的沙箱库', () => {
+    expect(checkSqlAllowed('SELECT * FROM sandbox_current_abc.my_table', CUR)).toBeNull();
+  });
+
+  it('允许访问反引号包裹的当前沙箱库', () => {
+    expect(checkSqlAllowed('SELECT * FROM `sandbox_current_abc`.`my_table`', CUR)).toBeNull();
   });
 
   it('字符串内的库名不误报', () => {
-    const result = checkSqlAllowed("SELECT * FROM my_table WHERE note='playground_admin.test'");
+    const result = checkSqlAllowed("SELECT * FROM my_table WHERE note='playground_admin.test'", CUR);
     expect(result).toBeNull();
+  });
+
+  it('表名.字段 不误判为库名', () => {
+    // employees.id 中的 employees 是表名，不是库名
+    const result = checkSqlAllowed('SELECT employees.id FROM employees', CUR);
+    expect(result).toBeNull();
+  });
+
+  it('别名.字段 不误判为库名', () => {
+    const result = checkSqlAllowed('SELECT e.id FROM employees e JOIN orders o ON e.id=o.employee_id', CUR);
+    expect(result).toBeNull();
+  });
+});
+
+// ============================================================
+// 空白符/注释绕过防护（严重-2 修复验证）
+// ============================================================
+describe('空白符绕过防护', () => {
+  const CUR = 'sandbox_current_abc';
+
+  it('禁止 mysql.user', () => {
+    expect(checkSqlAllowed('SELECT * FROM mysql.user', CUR)).toContain('Cannot access');
+  });
+
+  it('禁止 mysql . user（空格绕过）', () => {
+    expect(checkSqlAllowed('SELECT * FROM mysql . user', CUR)).toContain('Cannot access');
+  });
+
+  it('禁止 mysql/**/.user（注释绕过）', () => {
+    expect(checkSqlAllowed('SELECT * FROM mysql/**/.user', CUR)).toContain('Cannot access');
+  });
+
+  it('禁止 mysql\\n.user（换行绕过）', () => {
+    expect(checkSqlAllowed('SELECT * FROM mysql\n.user', CUR)).toContain('Cannot access');
+  });
+
+  it('禁止 INTO  OUTFILE（双空格绕过）', () => {
+    expect(checkSqlAllowed("SELECT * FROM t INTO  OUTFILE '/tmp/x'", CUR)).toContain('not allowed');
+  });
+
+  it('禁止 playground_admin . sandboxes（空格绕过）', () => {
+    expect(checkSqlAllowed('SELECT * FROM playground_admin . sandboxes', CUR)).toContain('Cannot access');
   });
 });
 
@@ -419,13 +471,13 @@ describe('可执行注释 /*! */ 防护', () => {
 describe('反斜杠转义绕过防护', () => {
   it('\\\' 后跟分号不能绕过拆分', () => {
     // '\\' 后跟 ; 再跟 DELETE —— 解析器应正确识别 DELETE 为第二条语句
-    const result = validateSql("SELECT '\\\\'; DELETE FROM playground_admin.query_logs");
+    const result = validateSql("SELECT '\\\\'; DELETE FROM playground_admin.query_logs", 'sandbox_current_abc');
     expect(result.length).toBeGreaterThan(0);
     expect(result[1] || result[0]).toContain('Cannot access database');
   });
 
   it('双反斜杠后引号不结束字符串', () => {
-    const result = checkSqlAllowed("SELECT 'a\\\\' FROM employees");
+    const result = checkSqlAllowed("SELECT 'a\\\\' FROM employees", 'sandbox_current_abc');
     expect(result).toBeNull();
   });
 });

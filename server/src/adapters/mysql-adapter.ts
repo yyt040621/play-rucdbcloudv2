@@ -4,7 +4,10 @@ import { config } from '../config';
 import { ColumnInfo, IndexInfo, TableInfo } from '../types';
 
 export class MySQLAdapter implements IDatabaseAdapter {
+  /** 管理连接池（root，仅服务端内部使用：建库/克隆/admin） */
   private pool: Pool;
+  /** 用户连接池（低权限账号，仅沙箱库权限，执行用户提交的 SQL） */
+  private userPool: Pool;
 
   constructor() {
     this.pool = mysql.createPool({
@@ -12,6 +15,21 @@ export class MySQLAdapter implements IDatabaseAdapter {
       port: config.db.port,
       user: config.db.user,
       password: config.db.password,
+      charset: 'utf8mb4',
+      multipleStatements: true,
+      waitForConnections: true,
+      connectionLimit: 20,
+      queueLimit: 0,
+      enableKeepAlive: true,
+      keepAliveInitialDelay: 10000,
+    });
+
+    // 低权限用户连接（GRANT 仅 sandbox_% 库，无 FILE/SUPER/SHOW DATABASES）
+    this.userPool = mysql.createPool({
+      host: config.db.host,
+      port: config.db.port,
+      user: config.db.appUser,
+      password: config.db.appPassword,
       charset: 'utf8mb4',
       multipleStatements: true,
       waitForConnections: true,
@@ -30,10 +48,16 @@ export class MySQLAdapter implements IDatabaseAdapter {
 
   async disconnect(): Promise<void> {
     await this.pool.end();
+    await this.userPool.end();
   }
 
+  // 用户 SELECT 走低权限连接（隔离 root 高权限）
   async executeOnDatabase(database: string, sql: string): Promise<unknown[]> {
-    const conn = await this.pool.getConnection();
+    return this.executeUserOnDatabase(database, sql);
+  }
+
+  async executeUserOnDatabase(database: string, sql: string): Promise<unknown[]> {
+    const conn = await this.userPool.getConnection();
     try {
       await conn.query(`USE \`${database}\``);
       const [rows] = await conn.query<RowDataPacket[] | RowDataPacket[][]>(sql);
@@ -46,6 +70,32 @@ export class MySQLAdapter implements IDatabaseAdapter {
         }
       }
       return rows as RowDataPacket[];
+    } finally {
+      conn.release();
+    }
+  }
+
+  /**
+   * 以低权限用户执行修改/DDL（用户提交的 INSERT/UPDATE/DELETE/CREATE 等）。
+   * SQL 需已包含 USE 数据库前缀。
+   */
+  async executeUserUpdate(sql: string): Promise<{ affectedRows: number; insertId: number }> {
+    const conn = await this.userPool.getConnection();
+    try {
+      const [result] = await conn.query<ResultSetHeader | ResultSetHeader[]>(sql);
+
+      // 多条语句时 mysql2 可能返回数组，取最后一个 DML 结果
+      if (Array.isArray(result)) {
+        const last = result[result.length - 1] as ResultSetHeader;
+        return {
+          affectedRows: last.affectedRows ?? 0,
+          insertId: last.insertId ?? 0,
+        };
+      }
+      return {
+        affectedRows: result.affectedRows,
+        insertId: result.insertId,
+      };
     } finally {
       conn.release();
     }

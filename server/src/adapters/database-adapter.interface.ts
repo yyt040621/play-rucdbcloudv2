@@ -23,6 +23,18 @@ export interface IDatabaseAdapter {
   /** 在指定数据库上执行查询类 SQL，返回结果行 */
   executeOnDatabase(database: string, sql: string): Promise<unknown[]>;
 
+  /**
+   * 以低权限用户（仅沙箱库权限）在指定数据库执行查询。
+   * 用于执行用户提交的 SELECT，避免用 root 高权限连接。
+   */
+  executeUserOnDatabase(database: string, sql: string): Promise<unknown[]>;
+
+  /**
+   * 以低权限用户执行修改/DDL 类 SQL（用户提交的 INSERT/UPDATE/DELETE/CREATE）。
+   * SQL 需已包含 USE 数据库前缀。
+   */
+  executeUserUpdate(sql: string): Promise<{ affectedRows: number; insertId: number }>;
+
   /** 创建数据库 */
   createDatabase(name: string): Promise<void>;
 

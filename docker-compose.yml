@@ -27,6 +27,9 @@ services:
       DB_PORT: 3306
       DB_USER: root
       DB_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      # 低权限用户（仅沙箱库权限），用于执行用户提交的 SQL
+      DB_APP_USER: playground_app
+      DB_APP_PASSWORD: ${MYSQL_APP_PASSWORD:-playground_app_pass}
       DB_ADMIN_DATABASE: playground_admin
       DB_TEMPLATE_DATABASE: playground_template
       SESSION_TTL_HOURS: ${SESSION_TTL_HOURS:-24}

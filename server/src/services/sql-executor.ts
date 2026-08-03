@@ -108,8 +108,8 @@ export class SqlExecutor {
     type: QueryResultType,
     startTime: number
   ): Promise<QueryResult> {
-    // 在目标数据库中执行修改语句
-    const result = await this.adapter.executeUpdate(
+    // 在目标数据库中执行修改语句（低权限用户连接）
+    const result = await this.adapter.executeUserUpdate(
       `USE \`${database}\`; ${sql}`
     );
     const executionTimeMs = Math.round(performance.now() - startTime);
@@ -131,7 +131,7 @@ export class SqlExecutor {
     firstWord: string,
     startTime: number
   ): Promise<QueryResult> {
-    await this.adapter.execute(`USE \`${database}\`; ${sql}`);
+    await this.adapter.executeUserUpdate(`USE \`${database}\`; ${sql}`);
     const executionTimeMs = Math.round(performance.now() - startTime);
 
     // 尝试生成友好的成功消息

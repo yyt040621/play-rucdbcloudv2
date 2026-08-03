@@ -11,6 +11,9 @@ export const config = {
     port: parseInt(process.env.DB_PORT || '3306', 10),
     user: process.env.DB_USER || 'root',
     password: process.env.DB_PASSWORD || '',
+    // 低权用户连接（仅沙箱库权限，用于执行用户 SQL）
+    appUser: process.env.DB_APP_USER || 'playground_app',
+    appPassword: process.env.DB_APP_PASSWORD || '',
     adminDatabase: process.env.DB_ADMIN_DATABASE || 'playground_admin',
     templateDatabase: process.env.DB_TEMPLATE_DATABASE || 'playground_template',
   },

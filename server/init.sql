@@ -9,6 +9,12 @@ GRANT ALL PRIVILEGES ON `playground_template`.* TO 'playground'@'%';
 GRANT ALL PRIVILEGES ON `sandbox\_%`.* TO 'playground'@'%';
 FLUSH PRIVILEGES;
 
+-- 低权限应用用户（仅沙箱库权限，无 FILE/SUPER/SHOW DATABASES，不访问 mysql.*/admin/模板库）
+CREATE USER IF NOT EXISTS 'playground_app'@'%' IDENTIFIED BY 'playground_app_pass';
+GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, ALTER, INDEX, REFERENCES
+  ON `sandbox\_%`.* TO 'playground_app'@'%';
+FLUSH PRIVILEGES;
+
 -- ============================================
 -- 管理库
 -- ============================================

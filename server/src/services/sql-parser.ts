@@ -192,9 +192,10 @@ export function extractOperation(sql: string): { topLevel: string; composite: st
 
 /**
  * 检查单条 SQL 是否被禁止。
+ * @param allowedDb 当前会话的沙箱库名（库名引用必须指向它）
  * 返回 null 表示通过检查，返回 string 表示拒绝原因。
  */
-export function checkSqlAllowed(sql: string): string | null {
+export function checkSqlAllowed(sql: string, allowedDb?: string): string | null {
   // 0. 拒绝可执行注释 /*! ... */ — 其内容会被 MySQL 真实执行
   if (/\/\*!/.test(sql)) {
     return `Operation not allowed: executable comment (/*! ... */)`;
@@ -208,6 +209,11 @@ export function checkSqlAllowed(sql: string): string | null {
   // 0. 扫描语句中任意位置的危险关键字（如 SELECT ... INTO OUTFILE）
   const midStmtError = checkMidStatementDangerous(sql);
   if (midStmtError) return midStmtError;
+
+  // 0.5 禁止 SHOW DATABASES（泄露所有库名，用户只需操作自己的沙箱）
+  if (topLevel === 'SHOW' && /\bSHOW\s+DATABASES\b/i.test(sql)) {
+    return `Operation not allowed: SHOW DATABASES`;
+  }
 
   // 1. 检查黑名单（精确匹配复合操作优先）
   if (FORBIDDEN_KEYWORDS.has(composite)) {
@@ -230,44 +236,63 @@ export function checkSqlAllowed(sql: string): string | null {
     }
   }
 
-  // 4. USE 语句只允许切换到自己的沙箱库（在路由层校验）
+  // 4. USE 语句只允许切换到当前会话的沙箱库
   if (topLevel === 'USE') {
-    // 提取目标数据库名
     const match = sql.match(/USE\s+`?(\w+)`?/i);
     if (match) {
       const targetDb = match[1];
-      // 只允许 sandbox_ 开头的库
-      if (!targetDb.startsWith('sandbox_')) {
-        return `USE is only allowed on sandbox databases`;
+      if (!allowedDb || targetDb !== allowedDb) {
+        return `USE is only allowed on your own sandbox database (${allowedDb})`;
       }
     }
   }
 
-  // 5. 限制语句引用的库名 — 只允许当前沙箱库（sandbox_*）
-  const dbRef = findDatabaseReferences(sql);
-  if (dbRef.length > 0) {
-    const invalid = dbRef.filter((db) => !db.startsWith('sandbox_'));
-    if (invalid.length > 0) {
-      return `Cannot access database: ${invalid.join(', ')}. Only your sandbox database is accessible.`;
-    }
+  // 5. 库名访问检查（绑定当前会话库 + 系统库黑名单 + 空白/注释规范化）
+  if (allowedDb) {
+    const dbErr = checkDatabaseAccess(sql, allowedDb);
+    if (dbErr) return dbErr;
   }
 
   return null;
 }
 
 /**
- * 提取 SQL 语句中引用的数据库名（形如 dbname.tablename 或 dbname.*）。
- * 跳过字符串字面量内容，避免误报。
+ * 系统/管理库黑名单（用户绝不可访问）
  */
-function findDatabaseReferences(sql: string): string[] {
-  const cleaned = stripStringLiterals(removeComments(sql));
-  const dbs = new Set<string>();
-  const pattern = /`?([A-Za-z0-9_]+)`?\.`?[A-Za-z0-9_*]+`?/g;
+const SYSTEM_DATABASES = [
+  'mysql', 'information_schema', 'performance_schema', 'sys',
+  'playground_admin', 'playground_template', 'tpcc_benchmark',
+];
+
+/**
+ * 检查 SQL 引用的库名。
+ * 返回错误字符串（拒绝）或 null（放行）。
+ *
+ * 策略：
+ * - 系统/管理库 → 拒绝
+ * - 其他 sandbox_* 库（非当前会话库）→ 拒绝（跨租户隔离）
+ * - 其余（表名.字段 / 别名.字段，如 employees.id、e.first_name）→ 放行
+ *   （用户无法创建任意库，非 sandbox 库名必然是表名/别名）
+ */
+function checkDatabaseAccess(sql: string, allowedDb: string): string | null {
+  // 规范化：去注释 → 去字符串 → 压缩空白（修复 mysql . user / /**/ 绕过）
+  const cleaned = stripStringLiterals(removeComments(sql)).replace(/\s+/g, ' ');
+
+  // 匹配 db.table（允许 db 与 . 之间有空白/注释）
+  const pattern = /`?([A-Za-z0-9_]+)`?\s*\.\s*`?[A-Za-z0-9_*]+`?/g;
   let match: RegExpExecArray | null;
   while ((match = pattern.exec(cleaned)) !== null) {
-    dbs.add(match[1].toLowerCase());
+    const db = match[1].toLowerCase();
+    // 系统库 → 拒绝
+    if (SYSTEM_DATABASES.includes(db)) {
+      return `Cannot access database: ${match[1]}`;
+    }
+    // 其他沙箱库（跨租户）→ 拒绝
+    if (db.startsWith('sandbox_') && db !== allowedDb.toLowerCase()) {
+      return `Cannot access other user's sandbox: ${match[1]}`;
+    }
   }
-  return Array.from(dbs);
+  return null;
 }
 
 /**
@@ -281,13 +306,11 @@ const MID_STMT_DANGEROUS = [
 ];
 
 function checkMidStatementDangerous(sql: string): string | null {
-  const cleaned = removeComments(sql).toUpperCase();
-
-  // 跳过字符串字面量内的内容
-  const withoutStrings = stripStringLiterals(cleaned);
+  // 规范化空白，修复 "INTO  OUTFILE"（双空格）绕过
+  const cleaned = stripStringLiterals(removeComments(sql)).replace(/\s+/g, ' ').toUpperCase();
 
   for (const keyword of MID_STMT_DANGEROUS) {
-    if (withoutStrings.includes(keyword)) {
+    if (cleaned.includes(keyword)) {
       return `Operation not allowed: ${keyword}`;
     }
   }
@@ -349,9 +372,10 @@ function referencesProtectedTable(sql: string): boolean {
 
 /**
  * 对完整 SQL 文本做安全检查（可含多条语句）。
+ * @param allowedDb 当前会话沙箱库名（库名引用必须指向它）
  * 返回拒绝原因数组，空数组表示全部通过。
  */
-export function validateSql(sql: string): string[] {
+export function validateSql(sql: string, allowedDb?: string): string[] {
   const errors: string[] = [];
 
   const statements = splitStatements(sql);
@@ -360,7 +384,7 @@ export function validateSql(sql: string): string[] {
     const stmt = statements[i].trim();
     if (!stmt) continue;
 
-    const error = checkSqlAllowed(stmt);
+    const error = checkSqlAllowed(stmt, allowedDb);
     if (error) {
       errors.push(`Statement ${i + 1}: ${error}`);
     }
