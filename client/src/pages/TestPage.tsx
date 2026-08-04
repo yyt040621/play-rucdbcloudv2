@@ -4,65 +4,77 @@ import { api } from '../services/api';
 import { Button } from '../components/ui/Button';
 import { Icon } from '../components/ui/Icon';
 import { StatCard } from '../components/ui/StatCard';
-import type { TPCStatus, TPCHistoryEntry } from '../services/api';
+import type { BenchStatus, BenchResult, TPCHistoryEntry } from '../services/api';
 
 const SCALE_OPTIONS = [
-  { value: 'small', label: '小规模 (2 仓库)', desc: '约 1-2 秒初始化，适合快速演示' },
-  { value: 'medium', label: '中规模 (5 仓库)', desc: '约 5 秒初始化，标准演示' },
-  { value: 'large', label: '大规模 (10 仓库)', desc: '约 10 秒初始化，更接近真实负载' },
+  { value: 'small', label: '小规模 (2 仓库)', desc: '约 1-2 分钟，适合快速验证' },
+  { value: 'medium', label: '中规模 (5 仓库)', desc: '约 2-3 分钟，标准演示' },
+  { value: 'large', label: '大规模 (10 仓库)', desc: '约 3-5 分钟，更接近真实负载' },
 ];
 
 const DURATION_OPTIONS = [30, 60, 120];
 
-const TXN_COLORS: Record<string, string> = {
-  NewOrder: 'var(--primary)',
-  Payment: 'var(--success)',
-  OrderStatus: 'var(--warning)',
-  Delivery: '#722ed1',
-  StockLevel: '#eb2f96',
+const PHASE_LABEL: Record<string, string> = {
+  idle: '未开始',
+  creating: '建表',
+  loading: '灌数据',
+  running: '运行中',
+  done: '已完成',
+  error: '失败',
+};
+
+const PHASE_TONE: Record<string, string> = {
+  idle: 'bg-[var(--bg-secondary)] text-[var(--text-secondary)]',
+  creating: 'bg-[var(--primary-bg)] text-[var(--primary)]',
+  loading: 'bg-[var(--warning-bg)] text-[var(--warning)]',
+  running: 'bg-[var(--primary-bg)] text-[var(--primary)]',
+  done: 'bg-[var(--success-bg)] text-[var(--success)]',
+  error: 'bg-[var(--error-bg)] text-[var(--error)]',
 };
 
 export function TestPage() {
   const [database, setDatabase] = useState<'mysql' | 'pgsql'>('mysql');
   const [scale, setScale] = useState('small');
   const [duration, setDuration] = useState(60);
-  const [status, setStatus] = useState<TPCStatus | null>(null);
+  const [status, setStatus] = useState<BenchStatus | null>(null);
+  const [result, setResult] = useState<BenchResult | null>(null);
   const [history, setHistory] = useState<TPCHistoryEntry[]>([]);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const prevRunningRef = useRef(false);
 
-  // 加载历史记录
+  const isRunning = status?.running || false;
+
+  // 加载历史
   useEffect(() => {
-    api.tpccHistory(database).then(setHistory).catch(() => {});
-  }, [database]);
+    api.tpccHistory().then(setHistory).catch(() => {});
+  }, []);
 
-  // 轮询状态
+  // 轮询状态（1s 粗粒度）
   useEffect(() => {
     pollRef.current = setInterval(async () => {
       try {
         const s = await api.tpccStatus(database);
-        // 检测到运行结束（之前 running → 现在 stopped），刷新历史
-        setStatus((prev) => {
-          if (prev?.running && !s.running) {
-            api.tpccHistory(database).then(setHistory).catch(() => {});
-          }
-          return s;
-        });
+        // 从运行中 → 结束：拉取结果与历史
+        if (prevRunningRef.current && !s.running && (s.phase === 'done' || s.phase === 'error')) {
+          api.tpccResult(database).then(setResult).catch(() => {});
+          api.tpccHistory().then(setHistory).catch(() => {});
+        }
+        prevRunningRef.current = s.running;
+        setStatus(s);
       } catch { /* 静默 */ }
-    }, 500); // 500ms ≈ 2Hz 轮询（后端状态 5Hz 更新，2Hz 拉取已足够平滑）
-
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
-    };
+    }, 1000);
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [database]);
 
-  // 启动测试
   const handleStart = useCallback(async () => {
     setStarting(true);
     setError(null);
+    setResult(null);
     try {
       const s = await api.tpccStart(database, scale, duration);
+      prevRunningRef.current = s.running;
       setStatus(s);
     } catch (err) {
       setError(err instanceof Error ? err.message : '启动失败');
@@ -71,27 +83,16 @@ export function TestPage() {
     }
   }, [database, scale, duration]);
 
-  // 停止测试
   const handleStop = useCallback(async () => {
-    try {
-      await api.tpccStop(database);
-    } catch { /* 静默 */ }
+    try { await api.tpccStop(database); } catch { /* 静默 */ }
   }, [database]);
 
-  const isRunning = status?.running || false;
-  const maxTxnCount = Math.max(...(status?.breakdown?.map((b) => b.count) || [1]), 1);
-
-  const TestIcon = (
-    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round"
-        d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
-    </svg>
-  );
+  const TestIcon = <Icon name="bolt" className="w-5 h-5" />;
 
   return (
     <PageLayout
       title="性能测试"
-      description="TPC-C 数据库性能基准测试"
+      description="TPC-C 数据库性能基准测试（BenchBase）"
       icon={TestIcon}
       toolbar={null}
     >
@@ -99,7 +100,6 @@ export function TestPage() {
         {/* 左侧：配置 + 控制 */}
         <div className="w-80 border-r border-[var(--border-color)] overflow-y-auto
           bg-[var(--bg-primary)] p-4 flex flex-col gap-5">
-          {/* 规模选择 */}
           {/* 数据库选择 */}
           <div>
             <span className="block text-[13px] font-semibold text-[var(--text-primary)]">
@@ -127,7 +127,7 @@ export function TestPage() {
             </div>
           </div>
 
-          {/* 测试规模 */}
+          {/* 规模 */}
           <div>
             <span className="block text-[13px] font-semibold text-[var(--text-primary)]">
               测试规模
@@ -138,8 +138,8 @@ export function TestPage() {
                   key={opt.value}
                   className={`flex items-start gap-2.5 p-3 rounded-lg border cursor-pointer transition-colors
                     ${scale === opt.value
-                      ? 'bg-[var(--accent)]/10 border-[var(--accent)]/50'
-                      : 'border-[var(--border-color)] hover:border-[var(--accent)]/30'
+                      ? 'bg-[var(--primary-bg)] border-[var(--primary)]/50'
+                      : 'border-[var(--border-color)] hover:border-[var(--primary)]/30'
                     }`}
                 >
                   <input
@@ -148,7 +148,7 @@ export function TestPage() {
                     value={opt.value}
                     checked={scale === opt.value}
                     onChange={() => setScale(opt.value)}
-                    className="mt-0.5 accent-[var(--accent)]"
+                    className="mt-0.5 accent-[var(--primary)]"
                     disabled={isRunning}
                   />
                   <div>
@@ -160,7 +160,7 @@ export function TestPage() {
             </div>
           </div>
 
-          {/* 时长选择 */}
+          {/* 时长 */}
           <div>
             <span className="block text-[13px] font-semibold text-[var(--text-primary)]">
               测试时长
@@ -173,8 +173,8 @@ export function TestPage() {
                   disabled={isRunning}
                   className={`flex-1 px-3 py-2 text-sm rounded-lg border cursor-pointer transition-colors
                     ${duration === d
-                      ? 'bg-[var(--accent)]/10 border-[var(--accent)] text-[var(--accent)] font-medium'
-                      : 'border-[var(--border-color)] text-[var(--text-secondary)] hover:border-[var(--accent)]/30'
+                      ? 'bg-[var(--primary-bg)] border-[var(--primary)] text-[var(--primary)] font-medium'
+                      : 'border-[var(--border-color)] text-[var(--text-secondary)] hover:border-[var(--primary)]/30'
                     }`}
                 >
                   {d}秒
@@ -205,121 +205,112 @@ export function TestPage() {
             </div>
           )}
 
-          {/* 数据库接口说明 */}
+          {/* BenchBase 说明 */}
           <div className="text-xs text-[var(--text-secondary)] p-3 rounded-lg
             bg-[var(--bg-secondary)] border border-[var(--border-color)] leading-relaxed">
             <p className="font-semibold mb-1 flex items-center gap-1.5">
               <Icon name="lightbulb" className="w-3.5 h-3.5 text-[var(--primary)]" />
-              关于 TPC-C
+              关于 BenchBase
             </p>
-            <p>TPC-C 是数据库 OLTP 性能标准基准，模拟批发商订单处理系统，包含 5 种事务（NewOrder、Payment、OrderStatus、Delivery、StockLevel）。</p>
-            <p className="mt-1.5 opacity-70">当前测试 MySQL 性能，未来可切换自研数据库。</p>
+            <p>BenchBase 是 CMU 开源的业界标准多数据库压测框架。本页用它运行标准 TPC-C 事务（NewOrder / Payment / OrderStatus / Delivery / StockLevel），结果可与其他数据库横向对比。</p>
           </div>
         </div>
 
-        {/* 右侧：进度 + 结果 */}
+        {/* 右侧：状态 + 结果 */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          {/* 实时状态 */}
-          <div className="p-5 border-b border-[var(--border-color)]">
-            {!status || !status.running ? (
+          {/* 状态区 */}
+          <div className="p-5 border-b border-[var(--border-color)] bg-[var(--bg-primary)]">
+            {!status || status.phase === 'idle' ? (
               <div className="text-center py-6 text-[var(--text-secondary)]">
-                {status && status.ready ? (
-                  <>
-                    <p className="flex items-center justify-center gap-1.5 text-sm text-[var(--text-primary)]">
-                      <Icon name="check" className="w-4 h-4 text-[var(--success)]" />
-                      TPC-C 环境已就绪
-                    </p>
-                    <p className="text-xs mt-1 opacity-60">选择规模后点击「开始测试」，立即运行</p>
-                  </>
-                ) : (
-                  <>
-                    <p className="text-sm">{status?.message || '正在准备 TPC-C 环境...'}</p>
-                    <p className="text-xs mt-1 opacity-60">首次加载需建表灌数据，请稍候</p>
-                  </>
-                )}
+                <p className="text-sm">选择数据库与规模，点击「开始测试」</p>
+                <p className="text-xs mt-1 opacity-60">BenchBase 将自动建表、灌数据并执行标准 TPC-C</p>
               </div>
             ) : (
-              <div className="space-y-4">
-                {/* 进度条 */}
-                <div>
-                  <div className="flex justify-between text-xs text-[var(--text-secondary)] mb-1.5">
-                    <span>{status.message || '测试进行中...'}</span>
-                    <span>{status.progress}%</span>
-                  </div>
-                  <div className="h-2.5 rounded-full bg-[var(--border-color)] overflow-hidden">
-                    <div
-                      className="h-full rounded-full bg-[var(--accent)] transition-all duration-500"
-                      style={{ width: `${status.progress}%` }}
-                    />
-                  </div>
+              <div className="space-y-3">
+                <div className="flex items-center gap-3">
+                  <span className={`px-2.5 py-1 text-xs font-medium rounded-full ${PHASE_TONE[status.phase] || PHASE_TONE.idle}`}>
+                    {PHASE_LABEL[status.phase] || status.phase}
+                  </span>
+                  <span className="text-xs text-[var(--text-secondary)]">已运行 {status.elapsedSec}s</span>
+                  {status.lastThroughput != null && status.running && (
+                    <span className="text-xs text-[var(--text-secondary)]">
+                      当前吞吐 ≈ {Math.round(status.lastThroughput)} txns/s
+                    </span>
+                  )}
+                  {status.running && (
+                    <span className="inline-block w-4 h-4 border-2 border-[var(--primary)] border-t-transparent rounded-full animate-spin" />
+                  )}
                 </div>
-
-                {/* 实时指标 */}
-                <div className="grid grid-cols-3 gap-3">
-                  <StatCard label="已完成" value={status.totalTransactions.toLocaleString()} hint="事务" />
-                  <StatCard label="TPM" value={status.tpm.toLocaleString()} hint="每分钟事务数" />
-                  <StatCard label="平均延迟" value={`${status.avgLatencyMs}`} hint="毫秒" />
-                </div>
-
-                {/* 事务分布 */}
-                <div className="space-y-2">
-                  <div className="text-[12px] font-semibold text-[var(--text-primary)]">
-                    事务分布
+                {status.progressHint && (
+                  <div className="text-xs text-[var(--text-secondary)] font-mono whitespace-pre-wrap leading-relaxed max-h-28 overflow-auto">
+                    {status.progressHint}
                   </div>
-                  {status.breakdown.map((t) => (
-                    <div key={t.name} className="flex items-center gap-2">
-                      <span className="w-24 text-[10px] text-[var(--text-secondary)]">{t.name}</span>
-                      <div className="flex-1 h-4 rounded bg-[var(--border-color)]/50 overflow-hidden">
-                        <div
-                          className="h-full rounded transition-all duration-500"
-                          style={{
-                            width: `${(t.count / maxTxnCount) * 100}%`,
-                            backgroundColor: TXN_COLORS[t.name] || 'var(--accent)',
-                          }}
-                        />
-                      </div>
-                      <span className="w-14 text-right text-[10px] font-mono text-[var(--text-primary)]">
-                        {t.count}
-                      </span>
-                      <span className="w-14 text-right text-[10px] font-mono text-[var(--text-secondary)]">
-                        {t.avgLatencyMs}ms
-                      </span>
-                    </div>
-                  ))}
-                </div>
+                )}
+                {status.message && status.phase === 'error' && (
+                  <div className="px-3 py-2 text-xs rounded-lg bg-[var(--error-bg)] border border-[var(--error)]/30 text-[var(--error)]">
+                    {status.message}
+                  </div>
+                )}
               </div>
             )}
           </div>
 
-          {/* 历史记录 */}
-          <div className="flex-1 overflow-auto">
-            <div className="px-5 py-3 text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider
-              border-b border-[var(--border-color)]">
-              历史测试记录
-            </div>
-            {history.length === 0 ? (
-              <div className="text-center py-8 text-[var(--text-secondary)] text-sm">
-                暂无测试记录
-              </div>
-            ) : (
-              <div className="divide-y divide-[var(--border-color)]">
-                {history.map((h) => (
-                  <div key={h.id} className="px-5 py-3 flex items-center justify-between hover:bg-[var(--bg-secondary)]">
-                    <div>
-                      <div className="text-sm font-medium text-[var(--text-primary)]">
-                        TPM <span className="text-[var(--accent)] font-bold">{h.tpm.toLocaleString()}</span>
-                      </div>
-                      <div className="text-[10px] text-[var(--text-secondary)]">
-                        {h.database || 'MySQL'} · {h.scale} · {h.warehouse} 仓库 · {h.durationSec}s · {h.totalTransactions} 事务 · 平均 {h.avgLatencyMs}ms
-                      </div>
-                    </div>
-                    <div className="text-[10px] text-[var(--text-secondary)]">
-                      {new Date(h.finishedAt).toLocaleString('zh-CN')}
-                    </div>
+          {/* 结果 + 历史 */}
+          <div className="flex-1 overflow-auto p-5 space-y-4">
+            {result && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <StatCard label="TPM（总吞吐）" value={Math.round(result.tpmTOTAL).toLocaleString()} hint="每分钟事务数" accent="primary" />
+                  <StatCard label="tpmC" value={Math.round(result.tpmC).toLocaleString()} hint="NewOrder 吞吐" accent="success" />
+                  <StatCard label="平均延迟" value={`${result.avgLatencyMs}`} hint="毫秒" accent="warning" />
+                  <StatCard label="P99 延迟" value={`${result.p99LatencyMs}`} hint="毫秒" accent="error" />
+                </div>
+                {result.message && (
+                  <div className="px-3 py-2 text-xs rounded-lg bg-[var(--warning-bg)] border border-[var(--warning)]/30 text-[var(--warning)]">
+                    {result.message}
                   </div>
-                ))}
+                )}
+                <div className="card p-4">
+                  <div className="text-[13px] font-semibold text-[var(--text-primary)] mb-3">本次测试信息</div>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs text-[var(--text-secondary)]">
+                    <div>数据库：{result.database === 'pgsql' ? 'PostgreSQL' : 'MySQL'}</div>
+                    <div>规模：{result.scale}（{result.warehouses} 仓库）</div>
+                    <div>时长：{result.durationSec}s</div>
+                    <div>总事务数：{result.totalTransactions.toLocaleString()}</div>
+                  </div>
+                </div>
               </div>
             )}
+
+            {/* 历史 */}
+            <div>
+              <div className="px-1 py-2 text-[13px] font-semibold text-[var(--text-primary)]">
+                历史测试记录
+              </div>
+              {history.length === 0 ? (
+                <div className="text-center py-6 text-[var(--text-secondary)] text-sm">
+                  暂无测试记录
+                </div>
+              ) : (
+                <div className="divide-y divide-[var(--border-color)]">
+                  {history.map((h) => (
+                    <div key={h.id} className="py-3 flex items-center justify-between">
+                      <div>
+                        <div className="text-sm font-medium text-[var(--text-primary)]">
+                          TPM <span className="text-[var(--primary)] font-bold">{h.tpm.toLocaleString()}</span>
+                        </div>
+                        <div className="text-[11px] text-[var(--text-secondary)]">
+                          {h.database === 'pgsql' ? 'PostgreSQL' : 'MySQL'} · {h.scale} · {h.warehouses} 仓库 · {h.durationSec}s · {h.totalTransactions} 事务 · 平均 {h.avgLatencyMs}ms
+                        </div>
+                      </div>
+                      <div className="text-[11px] text-[var(--text-secondary)]">
+                        {new Date(h.finishedAt).toLocaleString('zh-CN')}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>

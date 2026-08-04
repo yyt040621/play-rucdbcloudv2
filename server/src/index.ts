@@ -8,8 +8,7 @@ import { SqlExecutor } from './services/sql-executor';
 import { CleanupScheduler } from './services/cleanup-scheduler';
 import { TemplateLoader } from './services/template-loader';
 import { AuditLogger } from './services/audit-logger';
-import { TPCCRunner } from './services/tpcc-runner';
-import { TPCCRunnerPG } from './services/tpcc-runner-pg';
+import { BenchBaseRunner, ensureBenchBaseDatabases } from './services/benchbase-runner';
 import { sessionMiddleware } from './middleware/session.middleware';
 import { createSqlGuardMiddleware } from './middleware/sql-guard.middleware';
 import { sessionRateLimit, globalIpRateLimit, createSessionRateLimit } from './middleware/rate-limit.middleware';
@@ -43,12 +42,14 @@ async function main(): Promise<void> {
   const sandboxManager = new SandboxManager(pgAdapter);
   const sqlExecutor = new SqlExecutor(pgAdapter);
   const auditLogger = new AuditLogger(pgAdapter);
-  // TPC-C 性能测试服务（MySQL 版 + PostgreSQL 版）
-  const tpccRunner = new TPCCRunner(mysqlAdapter);
-  const tpccRunnerPG = new TPCCRunnerPG(pgAdapter);
-  // 启动时预初始化 TPC-C 环境（建表+灌数据），用户点开始即可直接测试
-  tpccRunner.preInitialize();
-  tpccRunnerPG.preInitialize();
+  // BenchBase 压测服务（替换自研 TPC-C，一次测一个数据库）
+  const benchBaseRunner = new BenchBaseRunner();
+  // 确保 BenchBase 专用数据库存在（BenchBase 会自建 TPC-C 表）
+  try {
+    await ensureBenchBaseDatabases(pgAdapter, mysqlAdapter);
+  } catch (err) {
+    console.warn('Failed to ensure BenchBase databases:', err);
+  }
 
   // 启动清理任务（清理时同步移除沙箱内存缓存，防止 Map 无限增长）
   const cleanupScheduler = new CleanupScheduler(pgAdapter);
@@ -91,7 +92,7 @@ async function main(): Promise<void> {
   app.use('/api/v1/query', createSqlGuardMiddleware(sandboxManager));
 
   // 挂载路由
-  const routes = createRoutes(pgAdapter, sandboxManager, sqlExecutor, auditLogger, cleanupScheduler, tpccRunner, tpccRunnerPG);
+  const routes = createRoutes(pgAdapter, sandboxManager, sqlExecutor, auditLogger, cleanupScheduler, benchBaseRunner);
   app.use('/api/v1', routes);
 
   // 全局错误处理

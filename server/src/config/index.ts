@@ -36,6 +36,19 @@ export const config = {
     ttlHours: parseInt(process.env.SESSION_TTL_HOURS || '24', 10),
   },
 
+  // BenchBase（替换自研 TPC-C，作为性能测试引擎）
+  benchbase: {
+    // BenchBase 发行包根目录（镜像内固定 /opt/benchbase）
+    home: process.env.BENCHBASE_HOME || '/opt/benchbase',
+    // 每次运行的临时工作目录（结果文件写到 <workDir>/<runId>/results/）
+    workDir: process.env.BENCHBASE_WORKDIR || '/tmp/benchbase',
+    // 专用压测数据库（BenchBase --create 自建 TPC-C 表）
+    pgDatabase: process.env.BENCHBASE_PG_DB || 'benchbase',
+    mysqlDatabase: process.env.BENCHBASE_MYSQL_DB || 'benchbase',
+    // JVM 堆内存
+    xmx: process.env.BENCHBASE_XMX || '1g',
+  },
+
   // Security limits
   security: {
     maxRowsPerQuery: parseInt(process.env.MAX_ROWS_PER_QUERY || '1000', 10),

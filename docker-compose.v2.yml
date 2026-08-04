@@ -71,6 +71,8 @@ services:
       MAX_STATEMENTS_PER_REQUEST: ${MAX_STATEMENTS_PER_REQUEST:-10}
       QUERY_TIMEOUT_SECONDS: 30
       CLEANUP_INTERVAL_MINUTES: 30
+      # BenchBase（压测引擎）JVM 堆内存
+      BENCHBASE_XMX: ${BENCHBASE_XMX:-1g}
     ports:
       - '3002:3001'
     depends_on:

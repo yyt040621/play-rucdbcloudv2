@@ -7,8 +7,7 @@ import { SandboxManager } from './services/sandbox-manager';
 import { SqlExecutor } from './services/sql-executor';
 import { CleanupScheduler } from './services/cleanup-scheduler';
 import { AuditLogger } from './services/audit-logger';
-import { TPCCRunner } from './services/tpcc-runner';
-import { TPCCRunnerPG } from './services/tpcc-runner-pg';
+import { BenchBaseRunner } from './services/benchbase-runner';
 import { sessionMiddleware } from './middleware/session.middleware';
 import { createSqlGuardMiddleware } from './middleware/sql-guard.middleware';
 import { createRoutes } from './routes';
@@ -52,8 +51,7 @@ function buildApp(adapter: IDatabaseAdapter): Express {
   const sqlExecutor = new SqlExecutor(adapter);
   const auditLogger = new AuditLogger(adapter);
   const cleanupScheduler = new CleanupScheduler(adapter);
-  const tpccRunner = new TPCCRunner(adapter);
-  const tpccRunnerPG = new TPCCRunnerPG(adapter);
+  const benchBaseRunner = new BenchBaseRunner();
 
   const app = express();
   app.set('trust proxy', 1);
@@ -63,7 +61,7 @@ function buildApp(adapter: IDatabaseAdapter): Express {
   app.use(express.json({ limit: '20kb' }));
   app.use(sessionMiddleware);
   app.use('/api/v1/query', createSqlGuardMiddleware(sandboxManager));
-  app.use('/api/v1', createRoutes(adapter, sandboxManager, sqlExecutor, auditLogger, cleanupScheduler, tpccRunner, tpccRunnerPG));
+  app.use('/api/v1', createRoutes(adapter, sandboxManager, sqlExecutor, auditLogger, cleanupScheduler, benchBaseRunner));
   return app;
 }
 

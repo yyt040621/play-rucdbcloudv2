@@ -94,22 +94,27 @@ class ApiService {
     return res.data.data!.logs;
   }
 
-  // === TPC-C ===
+  // === TPC-C（BenchBase）===
 
-  async tpccStart(database: string, scale: string, durationSec: number): Promise<TPCStatus> {
-    const res = await this.client.post<ApiResponse<{ status: TPCStatus }>>(
+  async tpccStart(database: string, scale: string, durationSec: number): Promise<BenchStatus> {
+    const res = await this.client.post<ApiResponse<{ status: BenchStatus }>>(
       '/tpcc/start', { database, scale, durationSec }
     );
     return res.data.data!.status;
   }
 
-  async tpccStatus(database: string): Promise<TPCStatus> {
-    const res = await this.client.get<ApiResponse<TPCStatus>>(`/tpcc/status?database=${database}`);
+  async tpccStatus(database: string): Promise<BenchStatus> {
+    const res = await this.client.get<ApiResponse<BenchStatus>>(`/tpcc/status?database=${database}`);
     return res.data.data!;
   }
 
-  async tpccHistory(database: string): Promise<TPCHistoryEntry[]> {
-    const res = await this.client.get<ApiResponse<{ history: TPCHistoryEntry[] }>>(`/tpcc/history?database=${database}`);
+  async tpccResult(database: string): Promise<BenchResult | null> {
+    const res = await this.client.get<ApiResponse<{ result: BenchResult | null }>>(`/tpcc/result?database=${database}`);
+    return res.data.data!.result;
+  }
+
+  async tpccHistory(): Promise<TPCHistoryEntry[]> {
+    const res = await this.client.get<ApiResponse<{ history: TPCHistoryEntry[] }>>(`/tpcc/history`);
     return res.data.data!.history;
   }
 
@@ -119,34 +124,47 @@ class ApiService {
   }
 }
 
-// === TPC-C 类型 ===
+// === TPC-C（BenchBase）类型 ===
 
-export interface TPCStatus {
+export interface BenchStatus {
+  database: 'mysql' | 'pgsql';
+  phase: 'idle' | 'creating' | 'loading' | 'running' | 'done' | 'error';
   running: boolean;
-  ready: boolean;
-  database: string;
-  scale: 'small' | 'medium' | 'large' | null;
-  progress: number;
   elapsedSec: number;
-  totalTransactions: number;
-  tpm: number;
-  avgLatencyMs: number;
-  breakdown: TPCTransactionResult[];
+  progressHint: string | null;
+  lastThroughput: number | null;
   message: string | null;
 }
 
-export interface TPCTransactionResult {
-  name: string;
-  count: number;
+export interface BenchPerTxn {
+  throughput: number;
+  avg: number;
+  p50: number;
+  p90: number;
+  p99: number;
+}
+
+export interface BenchResult {
+  database: string;
+  scale: string;
+  durationSec: number;
+  warehouses: number;
+  tpmC: number;
+  tpmTOTAL: number;
+  transactionsPerSecond: number;
   avgLatencyMs: number;
+  p99LatencyMs: number;
+  totalTransactions: number;
+  perTxn: Record<string, BenchPerTxn>;
+  message?: string;
 }
 
 export interface TPCHistoryEntry {
   id: string;
   database: string;
-  scale: 'small' | 'medium' | 'large';
+  scale: string;
   durationSec: number;
-  warehouse: number;
+  warehouses: number;
   totalTransactions: number;
   tpm: number;
   avgLatencyMs: number;
