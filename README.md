@@ -206,9 +206,9 @@ flowchart LR
 ### 快速启动（3 步）
 
 ```bash
-# 1. 拉取代码
-git clone https://github.com/yyt040621/rucdbcloud.playground.git
-cd rucdbcloud.playground
+# 1. 拉取代码（当前版本与本文档一致）
+git clone https://github.com/yyt040621/play-rucdbcloudv2.git
+cd play-rucdbcloudv2
 
 # 2. 配置环境变量（复制模板后填上 MySQL 密码）
 cp .env.example .env
