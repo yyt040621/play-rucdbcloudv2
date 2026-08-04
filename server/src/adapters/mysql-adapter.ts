@@ -157,6 +157,14 @@ export class MySQLAdapter implements IDatabaseAdapter {
     await this.execute(`DROP DATABASE IF EXISTS \`${name}\``);
   }
 
+  async databaseExists(name: string): Promise<boolean> {
+    const rows = await this.execute(
+      `SELECT SCHEMA_NAME FROM information_schema.SCHEMATA WHERE SCHEMA_NAME = ?`,
+      [name]
+    );
+    return (rows as RowDataPacket[]).length > 0;
+  }
+
   async getTables(database: string): Promise<TableInfo[]> {
     const rows = await this.execute(
       `SELECT

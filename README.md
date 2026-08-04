@@ -204,13 +204,13 @@ docker compose up -d --build
 ## 测试
 
 ```bash
-# 后端测试 (68 个)
+# 后端测试 (126 个)
 cd server && npm test
 
 # 前端测试 (8 个)
-cd client && npm test
+cd client && npx vitest run
 
-# 总计: 76 个测试
+# 总计: 134 个测试
 ```
 
 ---

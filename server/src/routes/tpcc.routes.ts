@@ -61,9 +61,9 @@ export function createTPCCRoutes(tpccMySQL: TPCCRunner, tpccPG: TPCCRunnerPG): R
 
   /**
    * GET /api/v1/tpcc/status?database=mysql|pgsql
-   * 查询当前测试状态
+   * 查询当前测试状态（需会话，防匿名探测内部状态）
    */
-  router.get('/status', (req: Request, res: Response) => {
+  router.get('/status', requireSession, (req: Request, res: Response) => {
     const database = (req.query.database as string) || 'mysql';
     const status = database === 'pgsql' ? tpccPG.getStatus() : tpccMySQL.getStatus();
     res.json({ code: ErrorCode.SUCCESS, data: status, message: 'ok' });
@@ -71,9 +71,9 @@ export function createTPCCRoutes(tpccMySQL: TPCCRunner, tpccPG: TPCCRunnerPG): R
 
   /**
    * GET /api/v1/tpcc/history?database=mysql|pgsql
-   * 历史测试结果
+   * 历史测试结果（需会话）
    */
-  router.get('/history', (req: Request, res: Response) => {
+  router.get('/history', requireSession, (req: Request, res: Response) => {
     const database = (req.query.database as string) || 'mysql';
     const history = database === 'pgsql' ? tpccPG.getHistory() : tpccMySQL.getHistory();
     res.json({ code: ErrorCode.SUCCESS, data: { history }, message: 'ok' });

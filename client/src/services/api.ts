@@ -37,7 +37,10 @@ class ApiService {
         if (error.response) {
           const { status, data } = error.response;
           if (status === 429) {
-            return Promise.reject(new Error('请求过于频繁，请稍后再试'));
+            // 透出服务端配额提示（如「每个 IP 最多同时创建 3 个沙箱」），
+            // 否则统一文案会掩盖限流原因，用户无法判断是频率超限还是沙箱配额触顶
+            const serverMsg = data?.message;
+            return Promise.reject(new Error(serverMsg || '请求过于频繁，请稍后再试'));
           }
           return Promise.reject(new Error(data?.message || `请求失败 (${status})`));
         }

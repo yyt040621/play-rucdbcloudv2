@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { ErrorCode } from '../types';
-import { validateSql } from '../services/sql-parser';
+import { validateSql, splitStatements } from '../services/sql-parser';
 import { config } from '../config';
 import { SandboxManager } from '../services/sandbox-manager';
 import { SessionRequest } from './session.middleware';
@@ -30,6 +30,16 @@ export function createSqlGuardMiddleware(sandboxManager: SandboxManager) {
       return;
     }
 
+    // 语句数量检查（防多语句堆叠扩大攻击面，6.5 风险缓解）
+    const stmtCount = splitStatements(sql).filter((s) => s.trim()).length;
+    if (stmtCount > config.security.maxStatementsPerRequest) {
+      res.status(403).json({
+        code: ErrorCode.SQL_NOT_ALLOWED,
+        message: `Too many statements per request (max ${config.security.maxStatementsPerRequest})`,
+      });
+      return;
+    }
+
     // 获取当前会话沙箱库名（用于绑定库名引用）
     const sessionReq = req as SessionRequest;
     const sessionId = sessionReq.resolvedSessionId;
@@ -39,7 +49,7 @@ export function createSqlGuardMiddleware(sandboxManager: SandboxManager) {
     }
 
     try {
-      const record = await sandboxManager.getOrCreateSandbox(sessionId);
+      const record = await sandboxManager.getOrCreateSandbox(sessionId, req.ip);
       const errors = validateSql(sql, record.dbName);
 
       if (errors.length > 0) {

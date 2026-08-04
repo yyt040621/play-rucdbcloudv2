@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { IDatabaseAdapter } from '../adapters/database-adapter.interface';
-import { SandboxManager } from '../services/sandbox-manager';
+import { SandboxManager, SandboxLimitError } from '../services/sandbox-manager';
 import { SessionRequest } from '../middleware/session.middleware';
 import { ErrorCode } from '../types';
 
@@ -27,7 +27,7 @@ export function createSchemaRoutes(
         return;
       }
 
-      const record = await sandboxManager.getOrCreateSandbox(sessionId);
+      const record = await sandboxManager.getOrCreateSandbox(sessionId, req.ip);
       const tables = await adapter.getTables(record.dbName);
 
       res.json({
@@ -36,6 +36,13 @@ export function createSchemaRoutes(
         message: 'ok',
       });
     } catch (err) {
+      if (err instanceof SandboxLimitError) {
+        res.status(err.statusCode).json({
+          code: ErrorCode.RATE_LIMITED,
+          message: err.message,
+        });
+        return;
+      }
       console.error('Get tables error:', err);
       res.status(500).json({
         code: ErrorCode.INTERNAL_ERROR,
@@ -62,7 +69,7 @@ export function createSchemaRoutes(
       }
 
       const { tableName } = req.params;
-      const record = await sandboxManager.getOrCreateSandbox(sessionId);
+      const record = await sandboxManager.getOrCreateSandbox(sessionId, req.ip);
 
       const [columns, indexes] = await Promise.all([
         adapter.getTableColumns(record.dbName, tableName),
@@ -79,6 +86,13 @@ export function createSchemaRoutes(
         message: 'ok',
       });
     } catch (err) {
+      if (err instanceof SandboxLimitError) {
+        res.status(err.statusCode).json({
+          code: ErrorCode.RATE_LIMITED,
+          message: err.message,
+        });
+        return;
+      }
       console.error('Get table schema error:', err);
       res.status(500).json({
         code: ErrorCode.INTERNAL_ERROR,

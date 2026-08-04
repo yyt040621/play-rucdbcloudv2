@@ -41,6 +41,9 @@ export interface IDatabaseAdapter {
   /** 删除数据库 */
   dropDatabase(name: string): Promise<void>;
 
+  /** 检查数据库/schema 是否存在（用于沙箱恢复时校验，防止返回已丢失的沙箱导致空表） */
+  databaseExists(name: string): Promise<boolean>;
+
   /** 获取数据库中所有用户表 */
   getTables(database: string): Promise<TableInfo[]>;
 

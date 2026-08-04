@@ -58,6 +58,11 @@ async function main(): Promise<void> {
   // 创建 Express 应用
   const app = express();
 
+  // 信任一层反代（nginx），使 req.ip 取真实客户端 IP。
+  // 这是 IP 限流与「单 IP 沙箱配额」正确工作的前提。
+  // nginx 已设置 X-Forwarded-For: $proxy_add_x_forwarded_for，伪造的前缀会被忽略。
+  app.set('trust proxy', 1);
+
   // 隐藏框架指纹
   app.disable('x-powered-by');
 

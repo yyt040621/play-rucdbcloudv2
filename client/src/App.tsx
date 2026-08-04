@@ -52,13 +52,18 @@ export default function App() {
     let retries = 0;
     const loadTables = async () => {
       const result = await fetchTables();
-      if (result.length === 0 && retries < 3) {
-        retries++;
-        setTimeout(loadTables, 1000);
+      if (result.length === 0) {
+        if (retries < 3) {
+          retries++;
+          setTimeout(loadTables, 1000);
+        } else {
+          // 重试后仍无表：沙箱可能已损坏/被清理，提示用户重置恢复初始数据
+          addToast('未检测到数据表，点击右上角「重置沙箱」可恢复初始示例数据', 'error');
+        }
       }
     };
     loadTables();
-  }, [sessionLoading, fetchTables]);
+  }, [sessionLoading, fetchTables, addToast]);
 
   // Session 错误提示
   useEffect(() => {

@@ -140,12 +140,15 @@ export function SelectPage({ theme, tables }: SelectPageProps) {
                 </label>
                 <select
                   aria-label="选择查询表"
-                  value={selectedTable}
+                  value={tables.length === 0 ? '' : selectedTable}
                   onChange={(e) => setSelectedTable(e.target.value)}
                   className="w-full mt-1.5 px-3 py-2 text-sm rounded-lg border cursor-pointer
                     border-[var(--border-color)] bg-[var(--bg-primary)]
                     text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent)]"
                 >
+                  {tables.length === 0 && (
+                    <option value="" disabled>（暂无数据表，请点击右上角「重置沙箱」）</option>
+                  )}
                   {tables.map((t) => (
                     <option key={t.name} value={t.name}>{t.name}</option>
                   ))}

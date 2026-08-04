@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { SqlExecutor } from '../services/sql-executor';
-import { SandboxManager } from '../services/sandbox-manager';
+import { SandboxManager, SandboxLimitError } from '../services/sandbox-manager';
 import { AuditLogger } from '../services/audit-logger';
 import { IDatabaseAdapter } from '../adapters/database-adapter.interface';
 import { SessionRequest } from '../middleware/session.middleware';
@@ -43,7 +43,7 @@ export function createQueryRoutes(
       }
 
       // 获取（或创建）沙箱
-      const record = await sandboxManager.getOrCreateSandbox(sessionId);
+      const record = await sandboxManager.getOrCreateSandbox(sessionId, req.ip);
       const dbName = record.dbName;
 
       // === 资源限制检查 ===
@@ -92,6 +92,14 @@ export function createQueryRoutes(
         message: 'ok',
       });
     } catch (err) {
+      // 沙箱配额超限返回 429
+      if (err instanceof SandboxLimitError) {
+        res.status(err.statusCode).json({
+          code: ErrorCode.RATE_LIMITED,
+          message: err.message,
+        });
+        return;
+      }
       // 不向客户端泄露内部错误详情，仅记录日志
       console.error('Query execution error:', err);
       res.status(500).json({

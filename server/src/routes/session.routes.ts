@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { SandboxManager } from '../services/sandbox-manager';
+import { SandboxManager, SandboxLimitError } from '../services/sandbox-manager';
 import { SessionRequest } from '../middleware/session.middleware';
 import { ErrorCode } from '../types';
 
@@ -17,7 +17,7 @@ export function createSessionRoutes(sandboxManager: SandboxManager): Router {
 
       if (existingId) {
         // 尝试恢复已有会话
-        const record = await sandboxManager.getOrCreateSandbox(existingId);
+        const record = await sandboxManager.getOrCreateSandbox(existingId, req.ip);
         res.json({
           code: ErrorCode.SUCCESS,
           data: {
@@ -30,7 +30,7 @@ export function createSessionRoutes(sandboxManager: SandboxManager): Router {
         });
       } else {
         // 创建新会话
-        const record = await sandboxManager.createSandbox();
+        const record = await sandboxManager.createSandbox(req.ip);
         res.status(201).json({
           code: ErrorCode.SUCCESS,
           data: {
@@ -43,13 +43,18 @@ export function createSessionRoutes(sandboxManager: SandboxManager): Router {
         });
       }
     } catch (err) {
+      // 沙箱配额超限返回 429，其他返回 500
+      if (err instanceof SandboxLimitError) {
+        res.status(err.statusCode).json({
+          code: ErrorCode.RATE_LIMITED,
+          message: err.message,
+        });
+        return;
+      }
       console.error('Session create error:', err);
-      // 沙箱配额超限返回 429/400，其他返回 500
-      const msg = err instanceof Error ? err.message : '';
-      const status = msg.includes('上限') ? 400 : 500;
-      res.status(status).json({
+      res.status(500).json({
         code: ErrorCode.INTERNAL_ERROR,
-        message: msg || 'Failed to create session',
+        message: 'Failed to create session',
       });
     }
   });
@@ -71,7 +76,7 @@ export function createSessionRoutes(sandboxManager: SandboxManager): Router {
         return;
       }
 
-      const record = await sandboxManager.resetSandbox(sessionId);
+      const record = await sandboxManager.resetSandbox(sessionId, req.ip);
 
       res.json({
         code: ErrorCode.SUCCESS,
@@ -84,6 +89,13 @@ export function createSessionRoutes(sandboxManager: SandboxManager): Router {
         message: 'Sandbox reset successfully',
       });
     } catch (err) {
+      if (err instanceof SandboxLimitError) {
+        res.status(err.statusCode).json({
+          code: ErrorCode.RATE_LIMITED,
+          message: err.message,
+        });
+        return;
+      }
       console.error('Session reset error:', err);
       res.status(500).json({
         code: ErrorCode.INTERNAL_ERROR,

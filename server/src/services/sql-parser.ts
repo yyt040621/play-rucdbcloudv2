@@ -253,6 +253,10 @@ export function checkSqlAllowed(sql: string, allowedDb?: string): string | null 
     if (dbErr) return dbErr;
   }
 
+  // 6. 只读元数据 schema（information_schema/pg_catalog）仅允许读操作，禁止写/DDL
+  const writeErr = checkReadonlySystemWrite(sql, topLevel);
+  if (writeErr) return writeErr;
+
   return null;
 }
 
@@ -261,10 +265,20 @@ export function checkSqlAllowed(sql: string, allowedDb?: string): string | null 
  * 同时覆盖 MySQL 库名与 PostgreSQL schema 名
  */
 const SYSTEM_DATABASES = [
-  'mysql', 'information_schema', 'performance_schema', 'sys',
+  'mysql', 'performance_schema', 'sys',
   'playground_admin', 'playground_template',
   'tpcc_benchmark', 'tpcc_benchmark_mysql', 'tpcc_benchmark_pg',
   'pg_catalog', 'public',
+];
+
+/**
+ * 只读系统库/schema（允许 introspection，无写入能力）。
+ * information_schema 与 pg_catalog 只包含元数据视图/系统表，
+ * 允许用户查询表结构等合法 introspection，不构成写入或越权风险。
+ * （pg_catalog 中的危险函数如 pg_sleep 等由 DANGEROUS_FUNCTIONS 单独拦截）
+ */
+const READONLY_SYSTEM_DATABASES = [
+  'information_schema', 'pg_catalog',
 ];
 
 /**
@@ -286,6 +300,10 @@ function checkDatabaseAccess(sql: string, allowedDb: string): string | null {
   let match: RegExpExecArray | null;
   while ((match = pattern.exec(cleaned)) !== null) {
     const db = match[1].toLowerCase();
+    // 只读元数据 schema（information_schema / pg_catalog）→ 放行 introspection
+    if (READONLY_SYSTEM_DATABASES.includes(db)) {
+      continue;
+    }
     // 系统库 → 拒绝
     if (SYSTEM_DATABASES.includes(db)) {
       return `Cannot access database: ${match[1]}`;
@@ -293,6 +311,28 @@ function checkDatabaseAccess(sql: string, allowedDb: string): string | null {
     // 其他沙箱库（跨租户）→ 拒绝
     if (db.startsWith('sandbox_') && db !== allowedDb.toLowerCase()) {
       return `Cannot access other user's sandbox: ${match[1]}`;
+    }
+  }
+  return null;
+}
+
+/** 写/DDL 操作（对只读元数据 schema 一律禁止） */
+const READONLY_WRITE_OPS = new Set([
+  'INSERT', 'UPDATE', 'DELETE', 'REPLACE',
+  'DROP', 'ALTER', 'TRUNCATE', 'CREATE',
+]);
+
+/**
+ * 禁止对只读元数据 schema（information_schema / pg_catalog）执行写/DDL 操作。
+ * introspection 只放行读操作（SELECT/SHOW/DESCRIBE/EXPLAIN/WITH）。
+ */
+function checkReadonlySystemWrite(sql: string, topLevel: string): string | null {
+  if (!READONLY_WRITE_OPS.has(topLevel)) return null;
+
+  const cleaned = stripStringLiterals(removeComments(sql)).replace(/\s+/g, ' ').toLowerCase();
+  for (const db of READONLY_SYSTEM_DATABASES) {
+    if (new RegExp(`\\b${db}\\s*\\.`).test(cleaned)) {
+      return `Cannot modify read-only system schema: ${db}`;
     }
   }
   return null;
@@ -308,6 +348,26 @@ const MID_STMT_DANGEROUS = [
   'LOAD DATA', 'LOAD FILE', 'LOAD XML',
 ];
 
+/**
+ * 危险函数（DoS / 文件系统 / 系统控制）——语句任意位置出现即拒绝。
+ * 覆盖 PostgreSQL 与 MySQL 常见危险/可挂起函数：
+ * - DoS/慢查询：pg_sleep、pg_sleep_for、pg_sleep_until、BENCHMARK、SLEEP
+ * - 文件系统：pg_read_file、pg_read_binary_file、pg_write_file、pg_ls_dir、pg_stat_file
+ * - 系统控制：pg_terminate_backend、pg_cancel_backend、pg_reload_conf、pg_rotate_logfile
+ * - 大对象：lo_import、lo_export、lo_unlink
+ * - 其他：pg_import_system_collations、pg_copy_logical_schema
+ * 使用「函数调用形式」（函数名后紧跟括号）匹配，避免误伤同名列名。
+ */
+const DANGEROUS_FUNCTIONS = [
+  'PG_SLEEP', 'PG_SLEEP_FOR', 'PG_SLEEP_UNTIL',
+  'BENCHMARK', 'SLEEP',
+  'PG_READ_FILE', 'PG_READ_BINARY_FILE', 'PG_LS_DIR', 'PG_WRITE_FILE',
+  'PG_STAT_FILE', 'PG_TERMINATE_BACKEND', 'PG_CANCEL_BACKEND',
+  'PG_RELOAD_CONF', 'PG_ROTATE_LOGFILE',
+  'LO_IMPORT', 'LO_EXPORT', 'LO_UNLINK',
+  'PG_IMPORT_SYSTEM_COLLATIONS', 'PG_COPY_LOGICAL_SCHEMA',
+];
+
 function checkMidStatementDangerous(sql: string): string | null {
   // 规范化空白，修复 "INTO  OUTFILE"（双空格）绕过
   const cleaned = stripStringLiterals(removeComments(sql)).replace(/\s+/g, ' ').toUpperCase();
@@ -316,6 +376,13 @@ function checkMidStatementDangerous(sql: string): string | null {
     if (cleaned.includes(keyword)) {
       return `Operation not allowed: ${keyword}`;
     }
+  }
+
+  // 危险函数（函数调用形式）
+  const fnPattern = new RegExp(`\\b(?:${DANGEROUS_FUNCTIONS.join('|')})\\s*\\(`);
+  const fnMatch = cleaned.match(fnPattern);
+  if (fnMatch) {
+    return `Operation not allowed: function ${fnMatch[0].replace(/\s*\($/, '')}`;
   }
 
   return null;

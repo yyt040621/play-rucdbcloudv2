@@ -5,14 +5,34 @@ import { config } from '../config';
 export interface SandboxRecord {
   sessionId: string;
   dbName: string;
+  clientIp?: string;
   createdAt: Date;
   lastAccessedAt: Date;
   expiresAt: Date;
 }
 
 /**
+ * 沙箱配额超限错误。
+ * 路由层据此返回 429（限流），而非 500 或 400。
+ */
+export class SandboxLimitError extends Error {
+  readonly statusCode: number;
+
+  constructor(message: string, statusCode = 429) {
+    super(message);
+    this.name = 'SandboxLimitError';
+    this.statusCode = statusCode;
+  }
+}
+
+/**
  * 沙箱管理器：负责用户沙箱数据库的创建、恢复、销毁。
  * 通过数据库适配器接口操作，与具体数据库实现解耦。
+ *
+ * 配额策略（防批量建库 DoS）：
+ * 1. 单 IP 并发沙箱上限（maxSandboxesPerIp，默认 3）——同一来源 IP 的活跃沙箱数
+ * 2. 全局活跃沙箱总上限（maxActiveSandboxes，默认 200）——防资源耗尽
+ * 两者任一超限即抛 SandboxLimitError（429）。
  */
 export class SandboxManager {
   private sandboxes: Map<string, SandboxRecord> = new Map();
@@ -21,27 +41,49 @@ export class SandboxManager {
 
   /**
    * 创建新沙箱
+   * @param clientIp 客户端 IP（用于单 IP 配额）
    */
-  async createSandbox(): Promise<SandboxRecord> {
+  async createSandbox(clientIp?: string): Promise<SandboxRecord> {
     const sessionId = uuidv4();  // 标准 UUID 格式（带横线）
     const dbName = `sandbox_${uuidv4().replace(/-/g, '').substring(0, 16)}`;
     const now = new Date();
     const expiresAt = new Date(now.getTime() + config.session.ttlHours * 60 * 60 * 1000);
 
-    // 沙箱总配额检查（防批量建库耗尽资源）
+    // 1. 单 IP 并发沙箱配额（防批量建库耗尽资源）
+    if (clientIp) {
+      try {
+        const rows = await this.adapter.execute(
+          `SELECT COUNT(*) AS cnt FROM \`${config.pg.adminSchema}\`.sandboxes
+           WHERE client_ip = ? AND status = 'active'`,
+          [clientIp]
+        );
+        const activeCount = Number(((rows as Array<Record<string, unknown>>)[0]?.cnt) || 0);
+        if (activeCount >= config.security.maxSandboxesPerIp) {
+          throw new SandboxLimitError(
+            `每个 IP 最多同时创建 ${config.security.maxSandboxesPerIp} 个沙箱，请稍后再试或等待过期自动清理`,
+            429
+          );
+        }
+      } catch (err) {
+        // 配额超限必须抛出；管理库未初始化/列不存在时忽略（启动时会初始化）
+        if (err instanceof SandboxLimitError) throw err;
+      }
+    }
+
+    // 2. 全局沙箱总配额（防资源耗尽）
     try {
       const rows = await this.adapter.execute(
         `SELECT COUNT(*) AS cnt FROM \`${config.pg.adminSchema}\`.sandboxes WHERE status = 'active'`
       );
-      const activeCount = ((rows as Array<Record<string, unknown>>)[0]?.cnt as number) || 0;
+      const activeCount = Number(((rows as Array<Record<string, unknown>>)[0]?.cnt) || 0);
       if (activeCount >= config.security.maxActiveSandboxes) {
-        throw new Error(`沙箱数量已达上限（${config.security.maxActiveSandboxes}），请稍后再试`);
+        throw new SandboxLimitError(
+          `系统沙箱数量已达上限（${config.security.maxActiveSandboxes}），请稍后再试`,
+          429
+        );
       }
     } catch (err) {
-      // 管理库未初始化时忽略配额检查；配额超限则抛出
-      if (err instanceof Error && err.message.includes('沙箱数量')) {
-        throw err;
-      }
+      if (err instanceof SandboxLimitError) throw err;
     }
 
     // 创建沙箱数据库
@@ -59,9 +101,9 @@ export class SandboxManager {
     try {
       await this.adapter.executeUpdate(
         `INSERT INTO \`${config.pg.adminSchema}\`.sandboxes
-         (session_id, db_name, status, created_at, last_accessed_at, expires_at)
-         VALUES (?, ?, 'active', ?, ?, ?)`,
-        [sessionId, dbName, now, now, expiresAt]
+         (session_id, db_name, client_ip, status, created_at, last_accessed_at, expires_at)
+         VALUES (?, ?, ?, 'active', ?, ?, ?)`,
+        [sessionId, dbName, clientIp ?? null, now, now, expiresAt]
       );
     } catch {
       // 管理库可能尚未初始化，忽略
@@ -70,6 +112,7 @@ export class SandboxManager {
     const record: SandboxRecord = {
       sessionId,
       dbName,
+      clientIp,
       createdAt: now,
       lastAccessedAt: now,
       expiresAt,
@@ -81,15 +124,16 @@ export class SandboxManager {
 
   /**
    * 获取或恢复沙箱
+   * @param clientIp 客户端 IP（新建沙箱时用于单 IP 配额）
    */
-  async getOrCreateSandbox(sessionId: string): Promise<SandboxRecord> {
+  async getOrCreateSandbox(sessionId: string, clientIp?: string): Promise<SandboxRecord> {
     // 先查内存缓存
     const existing = this.sandboxes.get(sessionId);
     if (existing) {
       // 检查是否过期
       if (new Date() > existing.expiresAt) {
         await this.destroySandbox(sessionId);
-        return this.createSandbox();
+        return this.createSandbox(clientIp);
       }
       existing.lastAccessedAt = new Date();
       return existing;
@@ -109,6 +153,7 @@ export class SandboxManager {
         const record: SandboxRecord = {
           sessionId,
           dbName: row.db_name as string,
+          clientIp: row.client_ip as string | undefined,
           createdAt: new Date(row.created_at as string),
           lastAccessedAt: new Date(),
           expiresAt: new Date(row.expires_at as string),
@@ -116,7 +161,16 @@ export class SandboxManager {
 
         if (new Date() > record.expiresAt) {
           await this.destroySandbox(sessionId);
-          return this.createSandbox();
+          return this.createSandbox(clientIp);
+        }
+
+        // 记录指向的沙箱 schema 已被清理/丢失（如 cleanup 后记录残留、手工删除），
+        // 直接返回会导致前端拿到空表列表且无法选择表。销毁记录并重建全新沙箱。
+        if (!(await this.adapter.databaseExists(record.dbName))) {
+          // 先缓存记录，让 destroySandbox 能按记录的真实 dbName 清理
+          this.sandboxes.set(sessionId, record);
+          await this.destroySandbox(sessionId);
+          return this.createSandbox(clientIp);
         }
 
         // 更新最后访问时间
@@ -133,25 +187,23 @@ export class SandboxManager {
       // 管理库可能未初始化
     }
 
-    // 检查沙箱数据库是否存在
-    try {
-      const tables = await this.adapter.getTables(dbName);
-      if (tables.length >= 0) {
-        const record: SandboxRecord = {
-          sessionId,
-          dbName,
-          createdAt: new Date(),
-          lastAccessedAt: new Date(),
-          expiresAt: new Date(Date.now() + config.session.ttlHours * 60 * 60 * 1000),
-        };
-        this.sandboxes.set(sessionId, record);
-        return record;
-      }
-    } catch {
-      // 沙箱数据库不存在，创建新的
+    // 管理库无记录：校验派生 dbName 的 schema 是否真实存在。
+    // 修复原逻辑 `tables.length >= 0` 恒为 true 的缺陷——schema 不存在时返回空表。
+    if (await this.adapter.databaseExists(dbName)) {
+      const record: SandboxRecord = {
+        sessionId,
+        dbName,
+        clientIp,
+        createdAt: new Date(),
+        lastAccessedAt: new Date(),
+        expiresAt: new Date(Date.now() + config.session.ttlHours * 60 * 60 * 1000),
+      };
+      this.sandboxes.set(sessionId, record);
+      return record;
     }
 
-    return this.createSandbox();
+    // schema 不存在 → 创建全新沙箱（新 sessionId 会返回给前端并更新 localStorage）
+    return this.createSandbox(clientIp);
   }
 
   /**
@@ -184,9 +236,9 @@ export class SandboxManager {
   /**
    * 重置沙箱（销毁 + 重建）
    */
-  async resetSandbox(oldSessionId: string): Promise<SandboxRecord> {
+  async resetSandbox(oldSessionId: string, clientIp?: string): Promise<SandboxRecord> {
     await this.destroySandbox(oldSessionId);
-    return this.createSandbox();
+    return this.createSandbox(clientIp);
   }
 
   /**

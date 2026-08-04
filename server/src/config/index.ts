@@ -49,6 +49,10 @@ export const config = {
     createSessionPerMinute: parseInt(process.env.CREATE_SESSION_PER_MINUTE || '20', 10),
     // 活跃沙箱总配额（防资源耗尽）
     maxActiveSandboxes: parseInt(process.env.MAX_ACTIVE_SANDBOXES || '200', 10),
+    // 单 IP 并发沙箱配额（防批量建库 DoS）
+    maxSandboxesPerIp: parseInt(process.env.MAX_SANDBOXES_PER_IP || '3', 10),
+    // 单请求最大语句数（防多语句堆叠扩大攻击面，6.5 风险缓解）
+    maxStatementsPerRequest: parseInt(process.env.MAX_STATEMENTS_PER_REQUEST || '10', 10),
     queryTimeoutSeconds: parseInt(process.env.QUERY_TIMEOUT_SECONDS || '30', 10),
   },
 

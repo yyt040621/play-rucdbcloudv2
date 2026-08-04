@@ -29,6 +29,11 @@ export function securityHeadersMiddleware(_req: Request, res: Response, next: Ne
   // 限制 Referer 泄露
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
 
+  // HSTS（仅 HTTPS 时生效；nginx 终止 TLS 时通过 X-Forwarded-Proto 识别）
+  if (_req.secure) {
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  }
+
   // 防缓存泄露会话（API 响应不缓存）
   res.setHeader('Cache-Control', 'no-store');
 

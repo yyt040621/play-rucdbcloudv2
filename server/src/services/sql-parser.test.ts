@@ -466,6 +466,84 @@ describe('可执行注释 /*! */ 防护', () => {
 });
 
 // ============================================================
+// 危险函数拦截（pg_sleep / BENCHMARK 等 DoS 向量）
+// ============================================================
+describe('危险函数拦截（DoS / 文件系统 / 系统控制）', () => {
+  it('拦截 SELECT pg_sleep(5)', () => {
+    const result = checkSqlAllowed('SELECT pg_sleep(5)');
+    expect(result).toContain('not allowed');
+  });
+
+  it('拦截带 schema 前缀的 pg_catalog.pg_sleep(5)', () => {
+    const result = checkSqlAllowed('SELECT pg_catalog.pg_sleep(5)');
+    expect(result).toContain('not allowed');
+  });
+
+  it('拦截 pg_sleep_for / pg_sleep_until', () => {
+    expect(checkSqlAllowed('SELECT pg_sleep_for(60)')).toContain('not allowed');
+    expect(checkSqlAllowed('SELECT pg_sleep_until(10)')).toContain('not allowed');
+  });
+
+  it('拦截 MySQL BENCHMARK(1000000, md5(1))', () => {
+    const result = checkSqlAllowed('SELECT BENCHMARK(1000000, md5(1))');
+    expect(result).toContain('not allowed');
+  });
+
+  it('拦截注释分隔的 pg_sleep/**/(5)', () => {
+    const result = checkSqlAllowed('SELECT pg_sleep/**/(5)');
+    expect(result).toContain('not allowed');
+  });
+
+  it('拦截文件系统函数 pg_read_file', () => {
+    const result = checkSqlAllowed("SELECT pg_read_file('/etc/passwd')");
+    expect(result).toContain('not allowed');
+  });
+
+  it('字符串内的函数名不误报', () => {
+    expect(checkSqlAllowed("SELECT 'pg_sleep(5)' FROM employees")).toBeNull();
+  });
+
+  it('同名列名不误报（不带括号）', () => {
+    expect(checkSqlAllowed('SELECT sleep FROM my_table')).toBeNull();
+  });
+});
+
+// ============================================================
+// 只读元数据 introspection（information_schema / pg_catalog）
+// ============================================================
+describe('只读元数据 introspection 放行', () => {
+  const CUR = 'sandbox_current_abc';
+
+  it('允许查询 information_schema.columns', () => {
+    expect(checkSqlAllowed('SELECT * FROM information_schema.columns', CUR)).toBeNull();
+  });
+
+  it('允许查询 information_schema.tables', () => {
+    expect(checkSqlAllowed('SELECT table_name FROM information_schema.tables', CUR)).toBeNull();
+  });
+
+  it('允许查询 pg_catalog.pg_class（只读元数据）', () => {
+    expect(checkSqlAllowed('SELECT * FROM pg_catalog.pg_class', CUR)).toBeNull();
+  });
+
+  it('information_schema 中仍禁止写入类操作', () => {
+    // information_schema 是视图库，但必须确保危险函数仍被拦截
+    const result = checkSqlAllowed('SELECT pg_sleep(5)', CUR);
+    expect(result).toContain('not allowed');
+  });
+
+  it('禁止写入 information_schema（DROP 拦截）', () => {
+    const result = checkSqlAllowed('DROP TABLE information_schema.columns', CUR);
+    expect(result).toContain('read-only');
+  });
+
+  it('管理库仍被拦截（playground_admin 不在只读白名单）', () => {
+    const result = checkSqlAllowed('SELECT * FROM playground_admin.sandboxes', CUR);
+    expect(result).toContain('Cannot access database');
+  });
+});
+
+// ============================================================
 // 反斜杠转义绕过防护
 // ============================================================
 describe('反斜杠转义绕过防护', () => {

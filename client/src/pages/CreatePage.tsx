@@ -108,7 +108,13 @@ export function CreatePage({ theme, tables, onRefreshTables }: CreatePageProps) 
       errors.push('表名只能包含字母、数字、下划线，且不能以数字开头');
     }
 
-    // 2. 有效字段（列名非空）
+    // 2. 所有列名必须非空（不允许留空行跳过，修复 4.6 校验缺口）
+    const emptyIdx = fields.findIndex((f) => !f.name.trim());
+    if (emptyIdx >= 0) {
+      errors.push(`第 ${emptyIdx + 1} 列列名为空，请填写列名或删除该行`);
+    }
+
+    // 3. 有效字段（列名非空）
     const validCols = fields.filter((f) => f.name.trim());
     if (validCols.length === 0) {
       errors.push('至少需要一个有效字段（填写列名）');
@@ -166,7 +172,8 @@ export function CreatePage({ theme, tables, onRefreshTables }: CreatePageProps) 
         .filter((f) => f.name.trim())
         .map((f) => buildColumnDef(f));
       if (cols.length === 0) return '';
-      return `CREATE TABLE \`${tableName}\` (\n${cols.join(',\n')}\n);`;
+      // PostgreSQL 方言：表名/列名统一用双引号（修复 4.4：PG 不支持反引号）
+      return `CREATE TABLE "${tableName}" (\n${cols.join(',\n')}\n);`;
     } else {
       return buildInsertSQL(insertTable, colValues, insertCols);
     }
@@ -193,7 +200,7 @@ export function CreatePage({ theme, tables, onRefreshTables }: CreatePageProps) 
       .filter((f) => f.name.trim())
       .map((f) => buildColumnDef(f));
     if (cols.length === 0) return;
-    const query = `CREATE TABLE \`${tableName}\` (\n${cols.join(',\n')}\n);`;
+    const query = `CREATE TABLE "${tableName}" (\n${cols.join(',\n')}\n);`;
     setSql(query);
     const execResults = await execute(query);
     if (execResults) {
@@ -228,6 +235,11 @@ export function CreatePage({ theme, tables, onRefreshTables }: CreatePageProps) 
       fetchTables();
       }
   }, [sql, execute, onRefreshTables, fetchTables]);
+
+  // 实时校验（修复 4.6：无效表单禁用「生成并执行」并实时提示）
+  const buildErrors = validateTable();
+  const canBuild = buildErrors.length === 0;
+  const buildMessage = buildErrors[0] || buildError;
 
   const CreateIcon = (
     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -359,19 +371,20 @@ export function CreatePage({ theme, tables, onRefreshTables }: CreatePageProps) 
                       </button>
                     </div>
 
-                    {/* 建表错误提示 */}
-                    {buildError && (
+                    {/* 建表错误提示（实时校验 + 点击时表已存在提示） */}
+                    {buildMessage && (
                       <div className="px-3 py-2.5 text-xs rounded-lg
                         bg-[var(--error)]/10 border border-[var(--error)]/40 text-[var(--error)]
                         flex items-start gap-2">
                         <span>⚠️</span>
-                        <span>{buildError}</span>
+                        <span>{buildMessage}</span>
                       </div>
                     )}
 
                     <button
                       onClick={handleBuildTable}
-                      disabled={isLoading || !tableName.trim()}
+                      disabled={isLoading || !canBuild}
+                      title={!canBuild ? buildMessage || '表单校验未通过' : undefined}
                       className="w-full px-4 py-2.5 text-sm font-medium rounded-lg text-white
                         bg-[var(--accent)] hover:bg-[var(--accent-hover)] transition-all
                         disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shadow-sm"
@@ -407,7 +420,7 @@ export function CreatePage({ theme, tables, onRefreshTables }: CreatePageProps) 
                         选择表
                       </label>
                       <select
-                        value={insertTable}
+                        value={tables.length === 0 ? '' : insertTable}
                         onChange={(e) => {
                           setInsertTable(e.target.value);
                           setColValues({});
@@ -416,11 +429,17 @@ export function CreatePage({ theme, tables, onRefreshTables }: CreatePageProps) 
                           border-[var(--border-color)] bg-[var(--bg-primary)]
                           text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent)]"
                       >
-                        {/* 当前选中的表（即使 tables 尚未刷新也显示） */}
-                        {!tables.some((t) => t.name === insertTable) && (
-                          <option value={insertTable}>{insertTable}</option>
+                        {tables.length === 0 ? (
+                          <option value="" disabled>（暂无数据表，请点击右上角「重置沙箱」）</option>
+                        ) : (
+                          <>
+                            {/* 当前选中的表（即使 tables 尚未刷新也显示） */}
+                            {!tables.some((t) => t.name === insertTable) && (
+                              <option value={insertTable}>{insertTable}</option>
+                            )}
+                            {tables.map((t) => <option key={t.name} value={t.name}>{t.name}</option>)}
+                          </>
                         )}
-                        {tables.map((t) => <option key={t.name} value={t.name}>{t.name}</option>)}
                       </select>
                     </div>
 
@@ -509,7 +528,7 @@ export function CreatePage({ theme, tables, onRefreshTables }: CreatePageProps) 
           <div className="flex-1 flex flex-col overflow-hidden">
             <div style={{ flex: '0 0 50%' }} className="border-b border-[var(--border-color)]">
               <SqlEditor
-                value={sql || 'CREATE TABLE my_table (\n  id INT AUTO_INCREMENT PRIMARY KEY,\n  name VARCHAR(100)\n);'}
+                value={sql || 'CREATE TABLE my_table (\n  id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,\n  name VARCHAR(100)\n);'}
                 onChange={setSql}
                 onExecute={handleExecuteSQL}
                 theme={theme}

@@ -188,12 +188,14 @@ export class SqlExecutor {
   }
 
   /**
-   * 错误信息脱敏：不暴露内部路径和IP
+   * 错误信息脱敏：不暴露内部路径、IP、连接串、密码及 PG/MySQL 定位细节。
+   * 前端只应看到脱敏后的可读错误，而非服务端内部信息。
    */
   private formatError(err: unknown): string {
-    if (!(err instanceof Error)) return String(err);
+    const raw = err instanceof Error ? err.message : String(err);
+    const MAX = 500;
 
-    let message = err.message;
+    let message = raw;
 
     // 脱敏处理：移除文件路径
     message = message.replace(/[A-Z]:\\[^\s]*/g, '<path>');
@@ -202,6 +204,16 @@ export class SqlExecutor {
     // 脱敏 IP 地址
     message = message.replace(/\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/g, '<ip>');
 
-    return message;
+    // 脱敏连接串 / 用户:密码（如 postgres://user:pass@host:5432/db）
+    message = message.replace(/[a-zA-Z0-9_]*:[^@\s]*@/g, '<user>:<pass>@');
+
+    // 去除 PostgreSQL 错误定位细节（LINE x / ^ 插入符 / POSITION / 具体 schema 名）
+    message = message.replace(/LINE \d+:[^\n]*/gi, '');
+    message = message.replace(/^\s*\^+$/gm, '');
+    message = message.replace(/POSITION: \d+/gi, '');
+
+    // 压缩空白并截断，防止超长错误撑爆响应
+    message = message.replace(/\s+/g, ' ').trim();
+    return message.length > MAX ? `${message.slice(0, MAX)}…` : message;
   }
 }

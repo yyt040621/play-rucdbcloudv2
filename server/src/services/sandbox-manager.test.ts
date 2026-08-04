@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { SandboxManager } from './sandbox-manager';
+import { SandboxManager, SandboxLimitError } from './sandbox-manager';
 import { IDatabaseAdapter } from '../adapters/database-adapter.interface';
 
 /**
@@ -37,6 +37,9 @@ function createMockAdapter(): IDatabaseAdapter {
         throw new Error(`Unknown database '${name}'`);
       }
       return [];
+    }),
+    databaseExists: vi.fn().mockImplementation(async (name: string) => {
+      return databases.has(name);
     }),
     getTableColumns: vi.fn().mockResolvedValue([]),
     getTableIndexes: vi.fn().mockResolvedValue([]),
@@ -92,6 +95,35 @@ describe('SandboxManager', () => {
       // 旧 ID 不存在，会创建新沙箱（新 ID 不同于旧 ID）
       expect(result.sessionId.length).toBe(36);
     });
+
+    it('管理库记录指向已丢失的 schema 时自动重建沙箱（修复空表列表）', async () => {
+      // 模拟管理库返回 active 记录，但 db_name 指向的 schema 已不存在
+      const deadAdapter = {
+        ...adapter,
+        execute: vi.fn().mockImplementation(async (sql: string, params?: unknown[]) => {
+          if (sql.includes('sandboxes')) {
+            return [{
+              session_id: 'dead-session',
+              db_name: 'sandbox_dead',
+              client_ip: null,
+              created_at: new Date().toISOString(),
+              last_accessed_at: new Date().toISOString(),
+              expires_at: new Date(Date.now() + 3600 * 1000).toISOString(),
+            }];
+          }
+          return [];
+        }),
+        databaseExists: vi.fn().mockResolvedValue(false), // schema 不存在
+      };
+      const deadManager = new SandboxManager(deadAdapter);
+
+      const result = await deadManager.getOrCreateSandbox('dead-session');
+
+      expect(result.dbName).not.toBe('sandbox_dead'); // 已重建
+      expect(result.sessionId).not.toBe('dead-session');
+      expect(deadAdapter.dropDatabase).toHaveBeenCalledWith('sandbox_dead');
+      expect(deadAdapter.createDatabase).toHaveBeenCalledWith(result.dbName);
+    });
   });
 
   describe('destroySandbox', () => {
@@ -133,6 +165,56 @@ describe('SandboxManager', () => {
 
     it('不存在时返回 undefined', () => {
       expect(manager.getSandbox('nonexistent')).toBeUndefined();
+    });
+  });
+
+  describe('单 IP 沙箱配额（防批量建库 DoS）', () => {
+    it('同一 IP 活跃沙箱数达上限时拒绝创建', async () => {
+      // 模拟管理库返回该 IP 已有 3 个活跃沙箱（默认上限 3）
+      const limitAdapter = {
+        ...adapter,
+        execute: vi.fn().mockImplementation(async (sql: string, params?: unknown[]) => {
+          if (sql.includes('client_ip')) return [{ cnt: 3 }];
+          if (sql.includes('sandboxes') && params?.[0]) return [];
+          return [];
+        }),
+      };
+      const limitManager = new SandboxManager(limitAdapter);
+
+      await expect(limitManager.createSandbox('1.2.3.4'))
+        .rejects.toThrow(SandboxLimitError);
+    });
+
+    it('未达上限时正常创建并记录 IP', async () => {
+      // 模拟管理库返回该 IP 有 1 个活跃沙箱（< 3）
+      const okAdapter = {
+        ...adapter,
+        execute: vi.fn().mockImplementation(async (sql: string, params?: unknown[]) => {
+          if (sql.includes('client_ip')) return [{ cnt: 1 }];
+          if (sql.includes('sandboxes') && params?.[0]) return [];
+          return [];
+        }),
+      };
+      const okManager = new SandboxManager(okAdapter);
+
+      const record = await okManager.createSandbox('5.6.7.8');
+      expect(record.clientIp).toBe('5.6.7.8');
+    });
+
+    it('全局沙箱配额超限时拒绝创建', async () => {
+      const globalAdapter = {
+        ...adapter,
+        execute: vi.fn().mockImplementation(async (sql: string) => {
+          if (sql.includes('client_ip')) return [{ cnt: 0 }];
+          // 全局 active 计数达到上限
+          if (sql.includes('sandboxes')) return [{ cnt: 200 }];
+          return [];
+        }),
+      };
+      const globalManager = new SandboxManager(globalAdapter);
+
+      await expect(globalManager.createSandbox('9.9.9.9'))
+        .rejects.toThrow(SandboxLimitError);
     });
   });
 });
