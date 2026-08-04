@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { Icon } from '../ui/Icon';
+import type { IconName } from '../ui/Icon';
 
 interface ToastProps {
   message: string;
@@ -7,16 +9,16 @@ interface ToastProps {
   duration?: number;
 }
 
-const typeStyles = {
-  success: 'border-[var(--success)] text-[var(--success)]',
-  error: 'border-[var(--error)] text-[var(--error)]',
-  info: 'border-[var(--accent)] text-[var(--accent)]',
+const typeColors: Record<'success' | 'error' | 'info', string> = {
+  success: 'var(--success)',
+  error: 'var(--error)',
+  info: 'var(--primary)',
 };
 
-const typeIcons = {
-  success: '✓',
-  error: '✕',
-  info: 'ℹ',
+const typeIcons: Record<'success' | 'error' | 'info', IconName> = {
+  success: 'check',
+  error: 'xcircle',
+  info: 'info',
 };
 
 export function Toast({ message, type = 'info', onClose, duration = 4000 }: ToastProps) {
@@ -37,13 +39,20 @@ export function Toast({ message, type = 'info', onClose, duration = 4000 }: Toas
 
   return (
     <div
-      className={`fixed top-4 right-4 z-[100] flex items-center gap-2 px-4 py-3
-        rounded-lg border shadow-lg bg-[var(--bg-primary)] max-w-md
-        ${typeStyles[type]} ${exiting ? 'toast-exit' : 'toast-enter'}`}
+      className={`fixed top-4 right-4 z-[100] flex items-center gap-2.5 px-4 py-3
+        rounded-lg border-l-4 border border-[var(--border-color)] shadow-pop
+        bg-[var(--bg-primary)] max-w-md
+        ${exiting ? 'toast-exit' : 'toast-enter'}`}
+      style={{ borderLeftColor: typeColors[type] }}
     >
-      <span className="font-bold text-lg">{typeIcons[type]}</span>
-      <span className="text-sm flex-1">{message}</span>
-      <button onClick={handleClose} className="ml-2 opacity-60 hover:opacity-100 text-lg leading-none">
+      <Icon name={typeIcons[type]} className="w-5 h-5 shrink-0" />
+      <span className="text-sm flex-1 text-[var(--text-primary)]">{message}</span>
+      <button
+        onClick={handleClose}
+        className="ml-2 opacity-50 hover:opacity-100 text-lg leading-none
+          text-[var(--text-secondary)] cursor-pointer"
+        aria-label="关闭"
+      >
         ×
       </button>
     </div>

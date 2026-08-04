@@ -11,14 +11,15 @@ import { ResultTable } from '../components/result/ResultTable';
 import { ErrorDisplay } from '../components/result/ErrorDisplay';
 import { useSqlExecute } from '../hooks/useSqlExecute';
 import { api } from '../services/api';
+import { Button } from '../components/ui/Button';
+import { Icon } from '../components/ui/Icon';
 import type { ColumnInfo, TableInfo, QueryResult } from '../types';
 
 interface SelectPageProps {
-  theme: 'light' | 'dark';
   tables: TableInfo[];
 }
 
-export function SelectPage({ theme, tables }: SelectPageProps) {
+export function SelectPage({ tables }: SelectPageProps) {
   const { results, isLoading, execute } = useSqlExecute();
 
   const [mode, setMode] = useState<'form' | 'sql'>('form');
@@ -132,19 +133,17 @@ export function SelectPage({ theme, tables }: SelectPageProps) {
           <>
             {/* 左侧：查询构建器 */}
             <div className="w-96 border-r border-[var(--border-color)] overflow-y-auto
-              bg-[var(--bg-secondary)] p-4 flex flex-col gap-4">
+              bg-[var(--bg-primary)] p-4 flex flex-col gap-4">
               {/* 选表 */}
               <div>
-                <label className="text-[11px] font-semibold text-[var(--text-secondary)] uppercase">
+                <label className="block text-[13px] font-semibold text-[var(--text-primary)]">
                   选择表
                 </label>
                 <select
                   aria-label="选择查询表"
                   value={tables.length === 0 ? '' : selectedTable}
                   onChange={(e) => setSelectedTable(e.target.value)}
-                  className="w-full mt-1.5 px-3 py-2 text-sm rounded-lg border cursor-pointer
-                    border-[var(--border-color)] bg-[var(--bg-primary)]
-                    text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent)]"
+                  className="select mt-1.5"
                 >
                   {tables.length === 0 && (
                     <option value="" disabled>（暂无数据表，请点击右上角「重置沙箱」）</option>
@@ -158,7 +157,7 @@ export function SelectPage({ theme, tables }: SelectPageProps) {
               {/* 选列 */}
               <div>
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-semibold text-[var(--text-secondary)] uppercase">
+                  <span className="block text-[13px] font-semibold text-[var(--text-primary)]">
                     选择列
                   </span>
                   <button
@@ -193,7 +192,7 @@ export function SelectPage({ theme, tables }: SelectPageProps) {
 
               {/* WHERE 条件 */}
               <div>
-                <span className="text-[11px] font-semibold text-[var(--text-secondary)] uppercase">
+                <span className="block text-[13px] font-semibold text-[var(--text-primary)]">
                   WHERE 条件
                 </span>
                 <div className="mt-1.5">
@@ -214,8 +213,7 @@ export function SelectPage({ theme, tables }: SelectPageProps) {
                   <select
                     value={orderCol}
                     onChange={(e) => setOrderCol(e.target.value)}
-                    className="w-full px-2 py-1.5 text-xs rounded border cursor-pointer
-                      border-[var(--border-color)] bg-[var(--bg-primary)] text-[var(--text-primary)]"
+                    className="select"
                   >
                     <option value="">(无)</option>
                     {allColumns.map((c) => (
@@ -230,8 +228,7 @@ export function SelectPage({ theme, tables }: SelectPageProps) {
                   <select
                     value={orderDir}
                     onChange={(e) => setOrderDir(e.target.value as 'ASC' | 'DESC')}
-                    className="w-full px-2 py-1.5 text-xs rounded border cursor-pointer
-                      border-[var(--border-color)] bg-[var(--bg-primary)] text-[var(--text-primary)]"
+                    className="select"
                   >
                     <option value="ASC">ASC</option>
                     <option value="DESC">DESC</option>
@@ -245,51 +242,40 @@ export function SelectPage({ theme, tables }: SelectPageProps) {
                     type="number"
                     value={limitCnt}
                     onChange={(e) => setLimitCnt(e.target.value)}
-                    className="w-full px-2 py-1.5 text-xs rounded border font-mono
-                      border-[var(--border-color)] bg-[var(--bg-primary)] text-[var(--text-primary)]"
+                    className="input font-mono"
                   />
                 </div>
               </div>
 
               {/* 操作按钮 */}
               <div className="flex gap-2 mt-auto pt-3 border-t border-[var(--border-color)]">
-                <button
+                <Button
                   onClick={handleExecute}
                   disabled={isLoading || !selectedTable}
-                  className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2 text-sm
-                    font-medium rounded-lg text-white transition-all cursor-pointer
-                    bg-[var(--accent)] hover:bg-[var(--accent-hover)]
-                    disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
+                  loading={isLoading}
+                  className="flex-1"
                 >
-                  {isLoading ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      查询中...
-                    </>
-                  ) : (
-                    <>🔍 查询</>
-                  )}
-                </button>
-                <button
+                  {isLoading ? '查询中...' : (<><Icon name="search" className="w-4 h-4" />查询</>)}
+                </Button>
+                <Button
+                  variant="outline"
                   onClick={handleReset}
                   title="重置所有条件"
-                  className="flex items-center gap-1 px-3 py-2 text-xs rounded-lg border cursor-pointer
-                    border-[var(--border-color)] text-[var(--text-secondary)]
-                    hover:bg-[var(--border-color)] transition-colors"
                 >
-                  🔄 重置
-                </button>
+                  <Icon name="refresh" className="w-3.5 h-3.5" />
+                  重置
+                </Button>
               </div>
 
               {/* SQL 预览（可折叠） */}
               <div className="shrink-0">
                 <button
                   onClick={() => setSqlPreviewOpen(!sqlPreviewOpen)}
-                  className="flex items-center gap-1.5 w-full text-[10px] font-semibold
-                    text-[var(--text-secondary)] uppercase tracking-wider
+                  className="flex items-center gap-1.5 w-full text-xs font-semibold
+                    text-[var(--text-secondary)]
                     hover:text-[var(--text-primary)] transition-colors cursor-pointer"
                 >
-                  <span className={`transition-transform ${sqlPreviewOpen ? 'rotate-90' : ''}`}>▶</span>
+                  <Icon name="chevron" className={`w-3.5 h-3.5 transition-transform ${sqlPreviewOpen ? 'rotate-90' : ''}`} />
                   SQL 预览
                 </button>
                 {sqlPreviewOpen && (
@@ -346,7 +332,6 @@ export function SelectPage({ theme, tables }: SelectPageProps) {
                 value={sql}
                 onChange={setSql}
                 onExecute={handleExecute}
-                theme={theme}
               />
             </div>
             <div className="flex items-center justify-between px-4 py-2
@@ -354,15 +339,14 @@ export function SelectPage({ theme, tables }: SelectPageProps) {
               <span className="text-xs text-[var(--text-secondary)]">
                 输入 SELECT 语句，Ctrl+Enter 执行
               </span>
-              <button
+              <Button
                 onClick={handleExecute}
                 disabled={isLoading}
-                className="px-4 py-1.5 text-sm font-medium rounded-lg text-white
-                  bg-[var(--accent)] hover:bg-[var(--accent-hover)] transition-all
-                  disabled:opacity-40 cursor-pointer"
+                loading={isLoading}
+                size="sm"
               >
-                {isLoading ? '执行中...' : '▶ 执行'}
-              </button>
+                {isLoading ? '执行中...' : (<><Icon name="play" className="w-3.5 h-3.5" />执行</>)}
+              </Button>
             </div>
             <div className="flex-1 overflow-auto">
               {results.length === 0 ? (

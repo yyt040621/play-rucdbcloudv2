@@ -50,39 +50,39 @@ export function SqlHighlight({ sql, className = '' }: SqlHighlightProps) {
 
         // 注释
         if (t.type === 'comment') {
-          return <span key={i} className="italic opacity-50">{t.text}</span>;
+          return <span key={i} className="italic text-[var(--sql-comment)]">{t.text}</span>;
         }
 
         const upper = t.text.toUpperCase();
 
         // 字符串
         if (t.type === 'string') {
-          return <span key={i} className="text-emerald-500 dark:text-emerald-400">{t.text}</span>;
+          return <span key={i} className="text-[var(--sql-string)]">{t.text}</span>;
         }
 
         // 数字
         if (t.type === 'number') {
-          return <span key={i} className="text-amber-500 dark:text-amber-400">{t.text}</span>;
+          return <span key={i} className="text-[var(--sql-number)]">{t.text}</span>;
         }
 
         // 关键词
         if (KEYWORDS.has(upper)) {
-          return <span key={i} className="text-violet-500 dark:text-violet-400 font-semibold">{t.text}</span>;
+          return <span key={i} className="text-[var(--sql-keyword)] font-semibold">{t.text}</span>;
         }
 
         // 类型
         if (TYPES.has(upper)) {
-          return <span key={i} className="text-cyan-500 dark:text-cyan-400">{t.text}</span>;
+          return <span key={i} className="text-[var(--sql-type)]">{t.text}</span>;
         }
 
         // 函数
         if (BUILTIN_FUNCTIONS.has(upper)) {
-          return <span key={i} className="text-sky-500 dark:text-sky-400">{t.text}</span>;
+          return <span key={i} className="text-[var(--sql-function)]">{t.text}</span>;
         }
 
         // 标识符 (反引号)
         if (t.type === 'identifier') {
-          return <span key={i} className="text-rose-500 dark:text-rose-400">{t.text}</span>;
+          return <span key={i} className="text-[var(--sql-identifier)]">{t.text}</span>;
         }
 
         // 操作符/标点

@@ -5,7 +5,6 @@ import { Toast } from './components/common/Toast';
 import { LoadingOverlay } from './components/common/Loading';
 import { ConfirmDialog } from './components/common/ConfirmDialog';
 import { useSession } from './hooks/useSession';
-import { useTheme } from './hooks/useTheme';
 import { useSchema } from './hooks/useSchema';
 
 // 路由级代码分割（减小首屏 bundle，按需加载页面）
@@ -26,7 +25,6 @@ interface ToastMessage {
 let toastCounter = 0;
 
 export default function App() {
-  const { theme, toggleTheme } = useTheme();
   const { isLoading: sessionLoading, error: sessionError, resetSession } = useSession();
   const { tables, selectedTable, fetchTables, selectTable } = useSchema();
 
@@ -112,8 +110,6 @@ export default function App() {
   return (
     <div className="h-screen flex flex-col bg-[var(--bg-primary)]">
       <Header
-        theme={theme}
-        onToggleTheme={toggleTheme}
         onReset={handleResetClick}
         isResetting={isResetting}
       />
@@ -125,16 +121,16 @@ export default function App() {
           <Route path="/test" element={<TestPage />} />
           <Route path="/demo" element={<DemoPage />} />
           <Route path="/create" element={
-            <CreatePage theme={theme} tables={tables} onRefreshTables={handleRefreshTables} />
+            <CreatePage tables={tables} onRefreshTables={handleRefreshTables} />
           } />
           <Route path="/select" element={
-            <SelectPage theme={theme} tables={tables} />
+            <SelectPage tables={tables} />
           } />
           <Route path="/update" element={
-            <UpdatePage theme={theme} onRefreshTables={handleRefreshTables} />
+            <UpdatePage onRefreshTables={handleRefreshTables} />
           } />
           <Route path="/delete" element={
-            <DeletePage theme={theme} onRefreshTables={handleRefreshTables} />
+            <DeletePage onRefreshTables={handleRefreshTables} />
           } />
           <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

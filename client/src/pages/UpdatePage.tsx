@@ -16,10 +16,11 @@ import { ConfirmDialog } from '../components/common/ConfirmDialog';
 import { useSqlExecute } from '../hooks/useSqlExecute';
 import { useSchema } from '../hooks/useSchema';
 import { api } from '../services/api';
+import { Button } from '../components/ui/Button';
+import { Icon } from '../components/ui/Icon';
 import type { ColumnInfo, QueryResult } from '../types';
 
 interface UpdatePageProps {
-  theme: 'light' | 'dark';
   onRefreshTables: () => void;
 }
 
@@ -31,7 +32,7 @@ interface SetItem {
 
 let setId = 0;
 
-export function UpdatePage({ theme, onRefreshTables }: UpdatePageProps) {
+export function UpdatePage({ onRefreshTables }: UpdatePageProps) {
   const { results, isLoading, execute } = useSqlExecute();
   const { fetchTables } = useSchema();
 
@@ -150,24 +151,22 @@ export function UpdatePage({ theme, onRefreshTables }: UpdatePageProps) {
           {mode === 'form' && (
             <>
               {execError && (
-                <div className="px-4 py-2.5 text-xs bg-[var(--error)]/10 border-b border-[var(--error)]/40 text-[var(--error)] flex items-start gap-2">
-                  <span>⚠️</span>
+                <div className="px-4 py-2.5 text-xs bg-[var(--error-bg)] border-b border-[var(--error)]/30 text-[var(--error)] flex items-start gap-2">
+                  <Icon name="warning" className="w-4 h-4 shrink-0 mt-0.5" />
                   <span className="font-mono break-all">{execError}</span>
                 </div>
               )}
               <div className="w-96 border-r border-[var(--border-color)] overflow-y-auto
-                bg-[var(--bg-secondary)] p-4 flex flex-col gap-4">
+                bg-[var(--bg-primary)] p-4 flex flex-col gap-4">
                 {/* 选表 */}
                 <div>
-                  <label className="text-[11px] font-semibold text-[var(--text-secondary)] uppercase">
+                  <label className="block text-[13px] font-semibold text-[var(--text-primary)]">
                     选择表
                   </label>
                   <select
                     value={selectedTable}
                     onChange={(e) => setSelectedTable(e.target.value)}
-                    className="w-full mt-1.5 px-3 py-2 text-sm rounded-lg border cursor-pointer
-                      border-[var(--border-color)] bg-[var(--bg-primary)]
-                      text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent)]"
+                    className="select mt-1.5"
                   >
                     <option value="">选择表...</option>
                     {tableList.map((t) => <option key={t} value={t}>{t}</option>)}
@@ -176,7 +175,7 @@ export function UpdatePage({ theme, onRefreshTables }: UpdatePageProps) {
 
                 {/* SET */}
                 <div>
-                  <span className="text-[11px] font-semibold text-[var(--text-secondary)] uppercase">
+                  <span className="block text-[13px] font-semibold text-[var(--text-primary)]">
                     SET (要修改的列)
                   </span>
                   <div className="mt-1.5 space-y-1.5">
@@ -185,8 +184,7 @@ export function UpdatePage({ theme, onRefreshTables }: UpdatePageProps) {
                         <select
                           value={s.column}
                           onChange={(e) => updateSetItem(s.id, 'column', e.target.value)}
-                          className="flex-1 px-2 py-1.5 text-xs rounded border cursor-pointer font-mono
-                            border-[var(--border-color)] bg-[var(--bg-primary)] text-[var(--text-primary)]"
+                          className="select flex-1 font-mono !py-1.5 !text-xs"
                         >
                           <option value="">列名</option>
                           {columns.map((c) => <option key={c.name} value={c.name}>{c.name}</option>)}
@@ -196,9 +194,7 @@ export function UpdatePage({ theme, onRefreshTables }: UpdatePageProps) {
                           value={s.value}
                           onChange={(e) => updateSetItem(s.id, 'value', e.target.value)}
                           placeholder="新值"
-                          className="flex-1 px-2 py-1.5 text-xs rounded border font-mono
-                            border-[var(--border-color)] bg-[var(--bg-primary)]
-                            text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent)]"
+                          className="input flex-1 font-mono !py-1.5 !text-xs"
                         />
                         <button
                           onClick={() => removeSetItem(s.id)}
@@ -221,7 +217,7 @@ export function UpdatePage({ theme, onRefreshTables }: UpdatePageProps) {
 
                 {/* WHERE */}
                 <div>
-                  <span className="text-[11px] font-semibold text-[var(--text-secondary)] uppercase">
+                  <span className="block text-[13px] font-semibold text-[var(--text-primary)]">
                     WHERE 条件
                   </span>
                   <div className="mt-1.5">
@@ -232,33 +228,33 @@ export function UpdatePage({ theme, onRefreshTables }: UpdatePageProps) {
                     />
                   </div>
                   {!buildWhereClause(conditions) && (
-                    <div className="mt-2 px-3 py-2 text-xs rounded-lg
-                      bg-[var(--error)]/5 border border-[var(--error)]/30 text-[var(--error)]">
-                      ⚠️ 无 WHERE 条件将修改所有行，执行前会需要确认
+                    <div className="mt-2 px-3 py-2 text-xs rounded-lg flex items-start gap-1.5
+                      bg-[var(--warning-bg)] border border-[var(--warning)]/30 text-[var(--warning)]">
+                      <Icon name="warning" className="w-4 h-4 shrink-0" />
+                      <span>无 WHERE 条件将修改所有行，执行前会需要确认</span>
                     </div>
                   )}
                 </div>
 
                 {/* 执行 */}
-                <button
+                <Button
                   onClick={handleExecute}
                   disabled={isLoading || !selectedTable}
-                  className="w-full px-4 py-2.5 text-sm font-medium rounded-lg text-white
-                    bg-[var(--accent)] hover:bg-[var(--accent-hover)] transition-all
-                    disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shadow-sm"
+                  loading={isLoading}
+                  className="w-full"
                 >
-                  {isLoading ? '更新中...' : '✏️ 更新'}
-                </button>
+                  {isLoading ? '更新中...' : (<><Icon name="pencil" className="w-4 h-4" />更新</>)}
+                </Button>
 
                 {/* SQL 预览（可折叠） */}
                 <div className="shrink-0">
                   <button
                     onClick={() => setSqlPreviewOpen(!sqlPreviewOpen)}
-                    className="flex items-center gap-1.5 w-full text-[10px] font-semibold
-                      text-[var(--text-secondary)] uppercase tracking-wider
+                    className="flex items-center gap-1.5 w-full text-xs font-semibold
+                      text-[var(--text-secondary)]
                       hover:text-[var(--text-primary)] transition-colors cursor-pointer"
                   >
-                    <span className={`transition-transform ${sqlPreviewOpen ? 'rotate-90' : ''}`}>▶</span>
+                    <Icon name="chevron" className={`w-3.5 h-3.5 transition-transform ${sqlPreviewOpen ? 'rotate-90' : ''}`} />
                     SQL 预览
                   </button>
                   {sqlPreviewOpen && (
@@ -313,8 +309,8 @@ export function UpdatePage({ theme, onRefreshTables }: UpdatePageProps) {
           {mode === 'sql' && (
             <div className="flex-1 flex flex-col overflow-hidden">
               {execError && (
-                <div className="px-4 py-2.5 text-xs bg-[var(--error)]/10 border-b border-[var(--error)]/40 text-[var(--error)] flex items-start gap-2">
-                  <span>⚠️</span>
+                <div className="px-4 py-2.5 text-xs bg-[var(--error-bg)] border-b border-[var(--error)]/30 text-[var(--error)] flex items-start gap-2">
+                  <Icon name="warning" className="w-4 h-4 shrink-0 mt-0.5" />
                   <span className="font-mono break-all">{execError}</span>
                 </div>
               )}
@@ -323,20 +319,19 @@ export function UpdatePage({ theme, onRefreshTables }: UpdatePageProps) {
                   value={sql || "UPDATE employees\nSET salary = 20000\nWHERE id = 1;"}
                   onChange={setSql}
                   onExecute={handleExecute}
-                  theme={theme}
                 />
               </div>
               <div className="flex items-center px-4 py-2 border-b border-[var(--border-color)] bg-[var(--bg-secondary)]">
                 <span className="text-xs text-[var(--text-secondary)]">Ctrl+Enter 执行</span>
-                <button
+                <Button
                   onClick={handleExecute}
                   disabled={isLoading}
-                  className="ml-auto px-4 py-1.5 text-sm font-medium rounded-lg text-white
-                    bg-[var(--accent)] hover:bg-[var(--accent-hover)] transition-all
-                    disabled:opacity-40 cursor-pointer"
+                  loading={isLoading}
+                  size="sm"
+                  className="ml-auto"
                 >
-                  {isLoading ? '执行中...' : '▶ 执行'}
-                </button>
+                  {isLoading ? '执行中...' : (<><Icon name="play" className="w-3.5 h-3.5" />执行</>)}
+                </Button>
               </div>
               <div className="flex-1 overflow-auto">
                 {results.map((r: QueryResult, i: number) => (
@@ -354,7 +349,7 @@ export function UpdatePage({ theme, onRefreshTables }: UpdatePageProps) {
 
       <ConfirmDialog
         open={showConfirm}
-        title="⚠️ 没有 WHERE 条件"
+        title="没有 WHERE 条件"
         message="此 UPDATE 将修改表中所有行！确定继续？"
         confirmLabel="我确定"
         cancelLabel="取消"

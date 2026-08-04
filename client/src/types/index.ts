@@ -73,8 +73,6 @@ export interface TableSchema {
 
 // === App State ===
 
-export type Theme = 'light' | 'dark';
-
 export interface AppState {
   sessionId: string | null;
   dbName: string | null;
@@ -83,5 +81,4 @@ export interface AppState {
   tableSchema: TableSchema | null;
   queryResults: QueryResult[];
   isLoading: boolean;
-  theme: Theme;
 }

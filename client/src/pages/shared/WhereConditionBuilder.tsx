@@ -88,9 +88,7 @@ export function WhereConditionBuilder({
             <select
               value={cond.logic}
               onChange={(e) => update(cond.id, 'logic', e.target.value)}
-              className="w-14 px-1 py-1 text-[11px] font-bold rounded border cursor-pointer
-                border-[var(--border-color)] bg-[var(--bg-primary)]
-                text-[var(--accent)] focus:outline-none"
+              className="select w-14 !py-1 !text-[11px] font-bold text-[var(--primary)]"
             >
               <option value="AND">AND</option>
               <option value="OR">OR</option>
@@ -102,10 +100,7 @@ export function WhereConditionBuilder({
           <select
             value={cond.column}
             onChange={(e) => update(cond.id, 'column', e.target.value)}
-            className="flex-1 px-2 py-1 text-xs rounded border cursor-pointer
-              border-[var(--border-color)] bg-[var(--bg-primary)]
-              text-[var(--text-primary)] font-mono focus:outline-none
-              focus:border-[var(--accent)]"
+            className="select flex-1 font-mono !py-1 !text-xs"
           >
             {columns.map((col) => (
               <option key={col.name} value={col.name}>
@@ -118,9 +113,7 @@ export function WhereConditionBuilder({
           <select
             value={cond.operator}
             onChange={(e) => update(cond.id, 'operator', e.target.value)}
-            className="w-16 px-1.5 py-1 text-xs rounded border cursor-pointer
-              border-[var(--border-color)] bg-[var(--bg-primary)]
-              text-[var(--text-primary)] font-mono focus:outline-none"
+            className="select w-16 font-mono !py-1 !text-xs"
           >
             {OPERATORS.map((op) => (
               <option key={op} value={op}>{op}</option>
@@ -134,10 +127,7 @@ export function WhereConditionBuilder({
             value={cond.value}
             onChange={(e) => update(cond.id, 'value', e.target.value)}
             placeholder="值"
-            className="flex-1 min-w-[80px] px-2 py-1 text-xs rounded border font-mono
-              border-[var(--border-color)] bg-[var(--bg-primary)]
-              text-[var(--text-primary)] focus:outline-none
-              focus:border-[var(--accent)] placeholder:text-[var(--text-secondary)]/50"
+            className="input flex-1 min-w-[80px] font-mono !py-1 !text-xs"
           />
 
           {/* 删除 */}

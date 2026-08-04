@@ -1,63 +1,67 @@
 import { useEffect, useRef } from 'react';
 import { EditorView, keymap, placeholder } from '@codemirror/view';
-import { EditorState, Compartment } from '@codemirror/state';
+import { EditorState } from '@codemirror/state';
 import { sql, PostgreSQL } from '@codemirror/lang-sql';
-import { oneDarkTheme } from '@codemirror/theme-one-dark';
+import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
+import { tags } from '@lezer/highlight';
 
 interface SqlEditorProps {
   value: string;
   onChange: (value: string) => void;
   onExecute: () => void;
-  theme: 'light' | 'dark';
 }
-
-// 用 Compartment 包裹主题扩展，使 theme 切换时不需要重建编辑器
-const themeCompartment = new Compartment();
 
 /**
- * 根据 theme 返回主题扩展数组
+ * 静态浅色主题：颜色全部引用 CSS 变量，自动跟随设计 token。
  */
-function getThemeExtensions(theme: 'light' | 'dark') {
-  const exts = [
-    EditorView.theme({
-      '&': {
-        backgroundColor: theme === 'dark' ? '#11111B' : '#FAFAFA',
-        color: theme === 'dark' ? '#CDD6F4' : '#1F2937',
-        fontSize: '14px',
-      },
-      '.cm-gutters': {
-        backgroundColor: theme === 'dark' ? '#181825' : '#F3F4F6',
-        color: theme === 'dark' ? '#6C7086' : '#9CA3AF',
-        border: 'none',
-      },
-      '.cm-activeLineGutter': {
-        backgroundColor: theme === 'dark' ? '#252540' : '#E5E7EB',
-      },
-      '.cm-activeLine': {
-        backgroundColor: theme === 'dark' ? '#1E1E2E33' : '#F3F4F633',
-      },
-      '.cm-cursor': {
-        borderLeftColor: theme === 'dark' ? '#89B4FA' : '#3B82F6',
-      },
-      '.cm-selectionBackground': {
-        backgroundColor: theme === 'dark' ? '#45475A66' : '#BFDBFE66',
-      },
-      '.cm-tooltip': {
-        backgroundColor: theme === 'dark' ? '#313244' : '#FFFFFF',
-        color: theme === 'dark' ? '#CDD6F4' : '#1F2937',
-        border: `1px solid ${theme === 'dark' ? '#45475A' : '#E5E7EB'}`,
-      },
-    }),
-  ];
+const lightTheme = EditorView.theme({
+  '&': {
+    backgroundColor: 'var(--bg-editor)',
+    color: 'var(--text-primary)',
+    fontSize: '14px',
+  },
+  '.cm-gutters': {
+    backgroundColor: 'var(--bg-secondary)',
+    color: 'var(--text-tertiary)',
+    border: 'none',
+  },
+  '.cm-activeLineGutter': {
+    backgroundColor: 'var(--primary-bg)',
+    color: 'var(--primary)',
+  },
+  '.cm-activeLine': {
+    backgroundColor: 'var(--bg-secondary)',
+  },
+  '.cm-cursor': {
+    borderLeftColor: 'var(--primary)',
+  },
+  '.cm-selectionBackground': {
+    backgroundColor: 'var(--primary-bg)',
+  },
+  '.cm-tooltip': {
+    backgroundColor: 'var(--bg-primary)',
+    color: 'var(--text-primary)',
+    border: '1px solid var(--border-color)',
+    borderRadius: '8px',
+  },
+});
 
-  if (theme === 'dark') {
-    exts.push(oneDarkTheme);
-  }
+/**
+ * SQL 语法高亮：与 SqlHighlight 共用同一组 --sql-* token，保证两处配色一致。
+ */
+const sqlHighlightStyle = HighlightStyle.define([
+  { tag: tags.keyword, color: 'var(--sql-keyword)', fontWeight: '600' },
+  { tag: tags.string, color: 'var(--sql-string)' },
+  { tag: tags.number, color: 'var(--sql-number)' },
+  { tag: tags.comment, color: 'var(--sql-comment)', fontStyle: 'italic' },
+  { tag: tags.typeName, color: 'var(--sql-type)' },
+  { tag: tags.function(tags.variableName), color: 'var(--sql-function)' },
+  { tag: tags.propertyName, color: 'var(--sql-identifier)' },
+  { tag: tags.operator, color: 'var(--text-secondary)' },
+  { tag: tags.bool, color: 'var(--sql-keyword)' },
+]);
 
-  return exts;
-}
-
-export function SqlEditor({ value, onChange, onExecute, theme }: SqlEditorProps) {
+export function SqlEditor({ value, onChange, onExecute }: SqlEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const isInitialized = useRef(false);
@@ -89,7 +93,8 @@ export function SqlEditor({ value, onChange, onExecute, theme }: SqlEditorProps)
           onChangeRef.current(update.state.doc.toString());
         }
       }),
-      themeCompartment.of(getThemeExtensions(theme)),
+      lightTheme,
+      syntaxHighlighting(sqlHighlightStyle),
       EditorView.lineWrapping,
     ];
 
@@ -113,16 +118,6 @@ export function SqlEditor({ value, onChange, onExecute, theme }: SqlEditorProps)
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // theme 切换：只重配置 theme compartment，不重建编辑器
-  useEffect(() => {
-    const view = viewRef.current;
-    if (!view) return;
-
-    view.dispatch({
-      effects: themeCompartment.reconfigure(getThemeExtensions(theme)),
-    });
-  }, [theme]);
 
   // 当外部 value 改变时同步到编辑器（如重置沙箱清空 SQL）
   useEffect(() => {

@@ -15,18 +15,18 @@ interface PageLayoutProps {
 
 export function PageLayout({ title, description, icon, toolbar, children }: PageLayoutProps) {
   return (
-    <div className="flex flex-col h-full overflow-hidden">
+    <div className="flex flex-col h-full overflow-hidden bg-[var(--bg-canvas)]">
       {/* 页面头部 */}
-      <div className="flex items-center justify-between px-5 py-3 border-b
-        border-[var(--border-color)] bg-[var(--bg-secondary)] shrink-0">
+      <div className="flex items-center justify-between px-6 py-3.5 border-b
+        border-[var(--border-color)] bg-[var(--bg-primary)] shrink-0">
         <div className="flex items-center gap-3">
-          <div className="flex items-center justify-center w-8 h-8 rounded-lg
-            bg-[var(--accent)]/10 text-[var(--accent)]">
+          <div className="flex items-center justify-center w-9 h-9 rounded-xl
+            bg-[var(--primary-bg)] text-[var(--primary)] shadow-sm">
             {icon}
           </div>
           <div>
-            <h2 className="text-sm font-semibold text-[var(--text-primary)]">{title}</h2>
-            <p className="text-xs text-[var(--text-secondary)]">{description}</p>
+            <h2 className="text-base font-bold text-[var(--text-primary)] leading-tight">{title}</h2>
+            <p className="text-[13px] text-[var(--text-secondary)]">{description}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">

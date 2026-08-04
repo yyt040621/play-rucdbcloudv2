@@ -1,6 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { PageLayout } from './shared/PageLayout';
 import { api } from '../services/api';
+import { Button } from '../components/ui/Button';
+import { Icon } from '../components/ui/Icon';
+import { StatCard } from '../components/ui/StatCard';
 import type { TPCStatus, TPCHistoryEntry } from '../services/api';
 
 const SCALE_OPTIONS = [
@@ -12,11 +15,11 @@ const SCALE_OPTIONS = [
 const DURATION_OPTIONS = [30, 60, 120];
 
 const TXN_COLORS: Record<string, string> = {
-  NewOrder: '#3B82F6',
-  Payment: '#10B981',
-  OrderStatus: '#F59E0B',
-  Delivery: '#8B5CF6',
-  StockLevel: '#EC4899',
+  NewOrder: 'var(--primary)',
+  Payment: 'var(--success)',
+  OrderStatus: 'var(--warning)',
+  Delivery: '#722ed1',
+  StockLevel: '#eb2f96',
 };
 
 export function TestPage() {
@@ -95,29 +98,29 @@ export function TestPage() {
       <div className="flex h-full overflow-hidden">
         {/* 左侧：配置 + 控制 */}
         <div className="w-80 border-r border-[var(--border-color)] overflow-y-auto
-          bg-[var(--bg-secondary)] p-4 flex flex-col gap-5">
+          bg-[var(--bg-primary)] p-4 flex flex-col gap-5">
           {/* 规模选择 */}
           {/* 数据库选择 */}
           <div>
-            <span className="text-[11px] font-semibold text-[var(--text-secondary)] uppercase">
+            <span className="block text-[13px] font-semibold text-[var(--text-primary)]">
               测试数据库
             </span>
             <div className="mt-2 grid grid-cols-2 gap-2">
               {([
-                { value: 'mysql', label: 'MySQL', icon: '🐬' },
-                { value: 'pgsql', label: 'PostgreSQL', icon: '🐘' },
+                { value: 'mysql', label: 'MySQL' },
+                { value: 'pgsql', label: 'PostgreSQL' },
               ] as const).map((db) => (
                 <button
                   key={db.value}
                   onClick={() => setDatabase(db.value)}
                   disabled={isRunning}
-                  className={`flex flex-col items-center gap-1 px-3 py-2.5 rounded-lg border cursor-pointer transition-colors
+                  className={`flex flex-col items-center gap-1.5 px-3 py-2.5 rounded-lg border cursor-pointer transition-all
                     ${database === db.value
-                      ? 'bg-[var(--accent)]/10 border-[var(--accent)] text-[var(--accent)]'
-                      : 'border-[var(--border-color)] text-[var(--text-secondary)] hover:border-[var(--accent)]/30'
+                      ? 'border-[var(--primary)] bg-[var(--primary-bg)] text-[var(--primary)] shadow-sm'
+                      : 'border-[var(--border-color)] text-[var(--text-secondary)] hover:border-[var(--primary)]/40'
                     }`}
                 >
-                  <span className="text-lg">{db.icon}</span>
+                  <Icon name="database" className="w-5 h-5" />
                   <span className="text-xs font-medium">{db.label}</span>
                 </button>
               ))}
@@ -126,7 +129,7 @@ export function TestPage() {
 
           {/* 测试规模 */}
           <div>
-            <span className="text-[11px] font-semibold text-[var(--text-secondary)] uppercase">
+            <span className="block text-[13px] font-semibold text-[var(--text-primary)]">
               测试规模
             </span>
             <div className="mt-2 space-y-1.5">
@@ -150,7 +153,7 @@ export function TestPage() {
                   />
                   <div>
                     <div className="text-xs font-medium text-[var(--text-primary)]">{opt.label}</div>
-                    <div className="text-[10px] text-[var(--text-secondary)]">{opt.desc}</div>
+                    <div className="text-[11px] text-[var(--text-secondary)]">{opt.desc}</div>
                   </div>
                 </label>
               ))}
@@ -159,7 +162,7 @@ export function TestPage() {
 
           {/* 时长选择 */}
           <div>
-            <span className="text-[11px] font-semibold text-[var(--text-secondary)] uppercase">
+            <span className="block text-[13px] font-semibold text-[var(--text-primary)]">
               测试时长
             </span>
             <div className="mt-2 flex gap-2">
@@ -183,36 +186,32 @@ export function TestPage() {
           {/* 控制按钮 */}
           <div className="flex gap-2 mt-auto">
             {isRunning ? (
-              <button
-                onClick={handleStop}
-                className="flex-1 px-4 py-2.5 text-sm font-medium rounded-lg text-white
-                  bg-[var(--error)] hover:opacity-90 transition-all cursor-pointer"
-              >
-                ⏹ 停止测试
-              </button>
+              <Button onClick={handleStop} variant="danger" className="flex-1">
+                <Icon name="stop" className="w-4 h-4" />
+                停止测试
+              </Button>
             ) : (
-              <button
-                onClick={handleStart}
-                disabled={starting}
-                className="flex-1 px-4 py-2.5 text-sm font-medium rounded-lg text-white
-                  bg-[var(--accent)] hover:bg-[var(--accent-hover)] transition-all
-                  disabled:opacity-50 cursor-pointer shadow-sm"
-              >
-                {starting ? '启动中...' : '▶ 开始测试'}
-              </button>
+              <Button onClick={handleStart} disabled={starting} loading={starting} className="flex-1">
+                {starting ? '启动中...' : (<><Icon name="play" className="w-4 h-4" />开始测试</>)}
+              </Button>
             )}
           </div>
 
           {error && (
-            <div className="px-3 py-2.5 text-xs rounded-lg bg-[var(--error)]/10 border border-[var(--error)]/30 text-[var(--error)]">
-              ⚠️ {error}
+            <div className="px-3 py-2.5 text-xs rounded-lg flex items-start gap-1.5
+              bg-[var(--error-bg)] border border-[var(--error)]/30 text-[var(--error)]">
+              <Icon name="warning" className="w-4 h-4 shrink-0" />
+              <span>{error}</span>
             </div>
           )}
 
           {/* 数据库接口说明 */}
-          <div className="text-[10px] text-[var(--text-secondary)] p-3 rounded-lg
-            bg-[var(--bg-primary)] border border-[var(--border-color)] leading-relaxed">
-            <p className="font-semibold mb-1">💡 关于 TPC-C</p>
+          <div className="text-xs text-[var(--text-secondary)] p-3 rounded-lg
+            bg-[var(--bg-secondary)] border border-[var(--border-color)] leading-relaxed">
+            <p className="font-semibold mb-1 flex items-center gap-1.5">
+              <Icon name="lightbulb" className="w-3.5 h-3.5 text-[var(--primary)]" />
+              关于 TPC-C
+            </p>
             <p>TPC-C 是数据库 OLTP 性能标准基准，模拟批发商订单处理系统，包含 5 种事务（NewOrder、Payment、OrderStatus、Delivery、StockLevel）。</p>
             <p className="mt-1.5 opacity-70">当前测试 MySQL 性能，未来可切换自研数据库。</p>
           </div>
@@ -226,7 +225,10 @@ export function TestPage() {
               <div className="text-center py-6 text-[var(--text-secondary)]">
                 {status && status.ready ? (
                   <>
-                    <p className="text-sm">✅ TPC-C 环境已就绪</p>
+                    <p className="flex items-center justify-center gap-1.5 text-sm text-[var(--text-primary)]">
+                      <Icon name="check" className="w-4 h-4 text-[var(--success)]" />
+                      TPC-C 环境已就绪
+                    </p>
                     <p className="text-xs mt-1 opacity-60">选择规模后点击「开始测试」，立即运行</p>
                   </>
                 ) : (
@@ -254,32 +256,14 @@ export function TestPage() {
 
                 {/* 实时指标 */}
                 <div className="grid grid-cols-3 gap-3">
-                  <div className="p-3 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border-color)]">
-                    <div className="text-[10px] text-[var(--text-secondary)] uppercase">已完成</div>
-                    <div className="text-xl font-bold text-[var(--text-primary)]">
-                      {status.totalTransactions.toLocaleString()}
-                    </div>
-                    <div className="text-[10px] text-[var(--text-secondary)]">事务</div>
-                  </div>
-                  <div className="p-3 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border-color)]">
-                    <div className="text-[10px] text-[var(--text-secondary)] uppercase">TPM</div>
-                    <div className="text-xl font-bold text-[var(--accent)]">
-                      {status.tpm.toLocaleString()}
-                    </div>
-                    <div className="text-[10px] text-[var(--text-secondary)]">每分钟事务数</div>
-                  </div>
-                  <div className="p-3 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border-color)]">
-                    <div className="text-[10px] text-[var(--text-secondary)] uppercase">平均延迟</div>
-                    <div className="text-xl font-bold text-[var(--text-primary)]">
-                      {status.avgLatencyMs}
-                    </div>
-                    <div className="text-[10px] text-[var(--text-secondary)]">毫秒</div>
-                  </div>
+                  <StatCard label="已完成" value={status.totalTransactions.toLocaleString()} hint="事务" />
+                  <StatCard label="TPM" value={status.tpm.toLocaleString()} hint="每分钟事务数" />
+                  <StatCard label="平均延迟" value={`${status.avgLatencyMs}`} hint="毫秒" />
                 </div>
 
                 {/* 事务分布 */}
                 <div className="space-y-2">
-                  <div className="text-[10px] font-semibold text-[var(--text-secondary)] uppercase">
+                  <div className="text-[12px] font-semibold text-[var(--text-primary)]">
                     事务分布
                   </div>
                   {status.breakdown.map((t) => (

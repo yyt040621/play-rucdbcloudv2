@@ -120,10 +120,7 @@ export function ColumnValueForm({
                 value={values[col.name] || ''}
                 onChange={(e) => updateValue(col.name, e.target.value)}
                 placeholder={col.nullable === false ? `${col.name}` : '(可选)'}
-                className="px-2 py-1 text-xs rounded border font-mono
-                  border-[var(--border-color)] bg-[var(--bg-primary)]
-                  text-[var(--text-primary)] focus:outline-none
-                  focus:border-[var(--accent)] placeholder:text-[var(--text-secondary)]/50"
+                className="input font-mono !py-1 !text-xs"
               />
             )}
           </div>

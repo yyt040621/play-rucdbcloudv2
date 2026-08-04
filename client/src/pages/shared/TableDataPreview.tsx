@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { api } from '../../services/api';
 import type { QueryResult } from '../../types';
 import { ResultTable } from '../../components/result/ResultTable';
+import { Icon } from '../../components/ui/Icon';
 
 interface TableDataPreviewProps {
   tableName: string;
@@ -48,10 +49,11 @@ export function TableDataPreview({
     <div>
       <div className="flex items-center justify-between px-3 py-2
         border-b border-[var(--border-color)]">
-        <span className="text-xs font-semibold text-[var(--text-secondary)]">
-          📊 {tableName} 数据预览
+        <span className="flex items-center gap-1.5 text-[13px] font-semibold text-[var(--text-secondary)]">
+          <Icon name="chart" className="w-4 h-4 text-[var(--primary)]" />
+          {tableName} 数据预览
           {result && result.type === 'select' && (
-            <span className="ml-2 font-normal opacity-60">
+            <span className="ml-1 font-normal opacity-60">
               ({result.rowCount} 行)
             </span>
           )}
@@ -59,16 +61,10 @@ export function TableDataPreview({
         <button
           onClick={fetchData}
           disabled={loading}
-          className="p-0.5 rounded hover:bg-[var(--border-color)] transition-colors cursor-pointer"
+          className="p-1 rounded-lg hover:bg-[var(--bg-secondary)] transition-colors cursor-pointer"
           title="刷新"
         >
-          <svg
-            className={`w-3.5 h-3.5 text-[var(--text-secondary)] ${loading ? 'animate-spin' : ''}`}
-            fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
-          >
-            <path strokeLinecap="round" strokeLinejoin="round"
-              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-          </svg>
+          <Icon name="refresh" className={`w-4 h-4 text-[var(--text-secondary)] ${loading ? 'animate-spin' : ''}`} />
         </button>
       </div>
       <div className="overflow-auto">

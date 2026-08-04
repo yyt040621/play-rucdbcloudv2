@@ -17,7 +17,7 @@ export function DmlResult({ result }: DmlResultProps) {
   return (
     <div className="p-4">
       <div className="flex items-start gap-3 p-3 rounded-md
-        bg-[var(--success)]/10 border border-[var(--success)]/30">
+        bg-[var(--success-bg)] border-l-4 border-l-[var(--success)] border border-[var(--success)]/30">
         <svg className="w-5 h-5 shrink-0 mt-0.5" style={{ color: 'var(--success)' }}
           fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round"
