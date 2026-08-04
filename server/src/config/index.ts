@@ -18,6 +18,19 @@ export const config = {
     templateDatabase: process.env.DB_TEMPLATE_DATABASE || 'playground_template',
   },
 
+  // PostgreSQL 连接（演示沙箱 + TPC-C PostgreSQL）
+  pg: {
+    host: process.env.PG_HOST || 'postgres',
+    port: parseInt(process.env.PG_PORT || '5432', 10),
+    user: process.env.PG_USER || 'playground',
+    password: process.env.PG_PASSWORD || 'playground_pass',
+    appUser: process.env.PG_APP_USER || 'playground_app',
+    appPassword: process.env.PG_APP_PASSWORD || 'playground_app_pass',
+    database: process.env.PG_DATABASE || 'rucdbcloud',
+    templateSchema: process.env.PG_TEMPLATE_SCHEMA || 'playground_template',
+    adminSchema: process.env.PG_ADMIN_SCHEMA || 'playground_admin',
+  },
+
   // Session
   session: {
     ttlHours: parseInt(process.env.SESSION_TTL_HOURS || '24', 10),

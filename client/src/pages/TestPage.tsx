@@ -20,6 +20,7 @@ const TXN_COLORS: Record<string, string> = {
 };
 
 export function TestPage() {
+  const [database, setDatabase] = useState<'mysql' | 'pgsql'>('mysql');
   const [scale, setScale] = useState('small');
   const [duration, setDuration] = useState(60);
   const [status, setStatus] = useState<TPCStatus | null>(null);
@@ -30,18 +31,18 @@ export function TestPage() {
 
   // 加载历史记录
   useEffect(() => {
-    api.tpccHistory().then(setHistory).catch(() => {});
-  }, []);
+    api.tpccHistory(database).then(setHistory).catch(() => {});
+  }, [database]);
 
   // 轮询状态
   useEffect(() => {
     pollRef.current = setInterval(async () => {
       try {
-        const s = await api.tpccStatus();
+        const s = await api.tpccStatus(database);
         // 检测到运行结束（之前 running → 现在 stopped），刷新历史
         setStatus((prev) => {
           if (prev?.running && !s.running) {
-            api.tpccHistory().then(setHistory).catch(() => {});
+            api.tpccHistory(database).then(setHistory).catch(() => {});
           }
           return s;
         });
@@ -51,28 +52,28 @@ export function TestPage() {
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
     };
-  }, []);
+  }, [database]);
 
   // 启动测试
   const handleStart = useCallback(async () => {
     setStarting(true);
     setError(null);
     try {
-      const s = await api.tpccStart(scale, duration);
+      const s = await api.tpccStart(database, scale, duration);
       setStatus(s);
     } catch (err) {
       setError(err instanceof Error ? err.message : '启动失败');
     } finally {
       setStarting(false);
     }
-  }, [scale, duration]);
+  }, [database, scale, duration]);
 
   // 停止测试
   const handleStop = useCallback(async () => {
     try {
-      await api.tpccStop();
+      await api.tpccStop(database);
     } catch { /* 静默 */ }
-  }, []);
+  }, [database]);
 
   const isRunning = status?.running || false;
   const maxTxnCount = Math.max(...(status?.breakdown?.map((b) => b.count) || [1]), 1);
@@ -96,6 +97,34 @@ export function TestPage() {
         <div className="w-80 border-r border-[var(--border-color)] overflow-y-auto
           bg-[var(--bg-secondary)] p-4 flex flex-col gap-5">
           {/* 规模选择 */}
+          {/* 数据库选择 */}
+          <div>
+            <span className="text-[11px] font-semibold text-[var(--text-secondary)] uppercase">
+              测试数据库
+            </span>
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              {([
+                { value: 'mysql', label: 'MySQL', icon: '🐬' },
+                { value: 'pgsql', label: 'PostgreSQL', icon: '🐘' },
+              ] as const).map((db) => (
+                <button
+                  key={db.value}
+                  onClick={() => setDatabase(db.value)}
+                  disabled={isRunning}
+                  className={`flex flex-col items-center gap-1 px-3 py-2.5 rounded-lg border cursor-pointer transition-colors
+                    ${database === db.value
+                      ? 'bg-[var(--accent)]/10 border-[var(--accent)] text-[var(--accent)]'
+                      : 'border-[var(--border-color)] text-[var(--text-secondary)] hover:border-[var(--accent)]/30'
+                    }`}
+                >
+                  <span className="text-lg">{db.icon}</span>
+                  <span className="text-xs font-medium">{db.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* 测试规模 */}
           <div>
             <span className="text-[11px] font-semibold text-[var(--text-secondary)] uppercase">
               测试规模
@@ -297,7 +326,7 @@ export function TestPage() {
                         TPM <span className="text-[var(--accent)] font-bold">{h.tpm.toLocaleString()}</span>
                       </div>
                       <div className="text-[10px] text-[var(--text-secondary)]">
-                        {h.scale} · {h.warehouse} 仓库 · {h.durationSec}s · {h.totalTransactions} 事务 · 平均 {h.avgLatencyMs}ms
+                        {h.database || 'MySQL'} · {h.scale} · {h.warehouse} 仓库 · {h.durationSec}s · {h.totalTransactions} 事务 · 平均 {h.avgLatencyMs}ms
                       </div>
                     </div>
                     <div className="text-[10px] text-[var(--text-secondary)]">

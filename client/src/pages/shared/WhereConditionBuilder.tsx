@@ -33,7 +33,7 @@ export function buildWhereClause(conditions: WhereCondition[]): string {
   const parts = conditions
     .filter((c) => c.column && c.value.trim())
     .map((c, i) => {
-      const col = `\`${c.column}\``;
+      const col = `"${c.column}"`;
       let val = c.value.trim();
 
       if (c.operator === 'IN') {

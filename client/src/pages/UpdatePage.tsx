@@ -78,7 +78,7 @@ export function UpdatePage({ theme, onRefreshTables }: UpdatePageProps) {
       .filter((s) => s.column && s.value.trim())
       .map((s) => {
         const col = columns.find((c) => c.name === s.column);
-        return `  \`${s.column}\` = ${formatSqlValue(s.value, col?.type)}`;
+        return `  "${s.column}" = ${formatSqlValue(s.value, col?.type)}`;
       });
     if (sets.length === 0) return '';
 

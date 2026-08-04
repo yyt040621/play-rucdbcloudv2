@@ -19,8 +19,8 @@ interface CreatePageProps {
 }
 
 const COLUMN_TYPES = [
-  'INT', 'VARCHAR(50)', 'VARCHAR(100)', 'VARCHAR(255)', 'TEXT',
-  'DECIMAL(10,2)', 'DATE', 'DATETIME', 'BOOLEAN', 'FLOAT', 'DOUBLE',
+  'INTEGER', 'BIGINT', 'VARCHAR(50)', 'VARCHAR(100)', 'VARCHAR(255)', 'TEXT',
+  'DECIMAL(10,2)', 'DATE', 'TIMESTAMP', 'BOOLEAN', 'FLOAT', 'DOUBLE PRECISION',
 ];
 
 interface FieldDef {
@@ -148,11 +148,11 @@ export function CreatePage({ theme, tables, onRefreshTables }: CreatePageProps) 
     return errors;
   };
 
-  // 生成单列定义（整数主键自动加 AUTO_INCREMENT，插入时自动生成）
+  // 生成单列定义（PostgreSQL：整数主键加 GENERATED ALWAYS AS IDENTITY，插入时自动生成）
   const buildColumnDef = useCallback((f: FieldDef): string => {
-    let col = `  \`${f.name}\` ${f.type}`;
-    const isIntType = /INT|BIGINT|SMALLINT|TINYINT/.test(f.type);
-    if (f.isPrimary && isIntType) col += ' AUTO_INCREMENT';
+    let col = `  "${f.name}" ${f.type}`;
+    const isIntType = /INT|SERIAL/.test(f.type);
+    if (f.isPrimary && isIntType) col += ' GENERATED ALWAYS AS IDENTITY';
     if (f.notNull) col += ' NOT NULL';
     if (f.isPrimary) col += ' PRIMARY KEY';
     return col;

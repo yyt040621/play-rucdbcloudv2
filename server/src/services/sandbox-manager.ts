@@ -31,7 +31,7 @@ export class SandboxManager {
     // 沙箱总配额检查（防批量建库耗尽资源）
     try {
       const rows = await this.adapter.execute(
-        `SELECT COUNT(*) AS cnt FROM \`${config.db.adminDatabase}\`.sandboxes WHERE status = 'active'`
+        `SELECT COUNT(*) AS cnt FROM \`${config.pg.adminSchema}\`.sandboxes WHERE status = 'active'`
       );
       const activeCount = ((rows as Array<Record<string, unknown>>)[0]?.cnt as number) || 0;
       if (activeCount >= config.security.maxActiveSandboxes) {
@@ -49,7 +49,7 @@ export class SandboxManager {
 
     // 从模板库克隆表结构和数据
     try {
-      await this.adapter.cloneDatabase(config.db.templateDatabase, dbName);
+      await this.adapter.cloneDatabase(config.pg.templateSchema, dbName);
     } catch (err) {
       // 如果模板库不存在或克隆失败，仍创建空数据库
       console.warn(`Failed to clone template database: ${err}`);
@@ -58,7 +58,7 @@ export class SandboxManager {
     // 也记录到管理库（如果管理库已初始化）
     try {
       await this.adapter.executeUpdate(
-        `INSERT INTO \`${config.db.adminDatabase}\`.sandboxes
+        `INSERT INTO \`${config.pg.adminSchema}\`.sandboxes
          (session_id, db_name, status, created_at, last_accessed_at, expires_at)
          VALUES (?, ?, 'active', ?, ?, ?)`,
         [sessionId, dbName, now, now, expiresAt]
@@ -99,7 +99,7 @@ export class SandboxManager {
     const dbName = `sandbox_${sessionId.replace(/-/g, '').substring(0, 16)}`;
     try {
       const rows = await this.adapter.execute(
-        `SELECT * FROM \`${config.db.adminDatabase}\`.sandboxes
+        `SELECT * FROM \`${config.pg.adminSchema}\`.sandboxes
          WHERE session_id = ? AND status = 'active'`,
         [sessionId]
       );
@@ -121,7 +121,7 @@ export class SandboxManager {
 
         // 更新最后访问时间
         await this.adapter.executeUpdate(
-          `UPDATE \`${config.db.adminDatabase}\`.sandboxes
+          `UPDATE \`${config.pg.adminSchema}\`.sandboxes
            SET last_accessed_at = ? WHERE session_id = ?`,
           [new Date(), sessionId]
         );
@@ -170,7 +170,7 @@ export class SandboxManager {
     // 更新管理库
     try {
       await this.adapter.executeUpdate(
-        `UPDATE \`${config.db.adminDatabase}\`.sandboxes
+        `UPDATE \`${config.pg.adminSchema}\`.sandboxes
          SET status = 'cleaned' WHERE session_id = ?`,
         [sessionId]
       );

@@ -2,12 +2,14 @@ import express from 'express';
 import cors from 'cors';
 import { config } from './config';
 import { MySQLAdapter } from './adapters/mysql-adapter';
+import { PostgreSQLAdapter } from './adapters/postgresql-adapter';
 import { SandboxManager } from './services/sandbox-manager';
 import { SqlExecutor } from './services/sql-executor';
 import { CleanupScheduler } from './services/cleanup-scheduler';
 import { TemplateLoader } from './services/template-loader';
 import { AuditLogger } from './services/audit-logger';
 import { TPCCRunner } from './services/tpcc-runner';
+import { TPCCRunnerPG } from './services/tpcc-runner-pg';
 import { sessionMiddleware } from './middleware/session.middleware';
 import { createSqlGuardMiddleware } from './middleware/sql-guard.middleware';
 import { sessionRateLimit, globalIpRateLimit, createSessionRateLimit } from './middleware/rate-limit.middleware';
@@ -15,37 +17,41 @@ import { securityHeadersMiddleware } from './middleware/security-headers.middlew
 import { createRoutes } from './routes';
 
 async function main(): Promise<void> {
-  // 初始化数据库适配器（当前使用 MySQL）
-  const adapter = new MySQLAdapter();
+  // 数据库适配器：PostgreSQL 用于演示沙箱，MySQL 用于 TPC-C MySQL 选项
+  const pgAdapter = new PostgreSQLAdapter();
+  const mysqlAdapter = new MySQLAdapter();
 
   try {
-    await adapter.connect();
-    console.log('Database connected successfully');
+    await pgAdapter.connect();
+    await mysqlAdapter.connect();
+    console.log('PostgreSQL + MySQL connected successfully');
   } catch (err) {
     console.error('Failed to connect to database:', err);
     process.exit(1);
   }
 
-  // 确保管理库和模板库存在（含预置数据）
-  const templateLoader = new TemplateLoader(adapter);
+  // 确保管理 schema 和模板 schema 存在（含预置数据）
+  const templateLoader = new TemplateLoader(pgAdapter);
   try {
     await templateLoader.initialize();
-    console.log('Admin and template databases ready');
+    console.log('Admin and template schemas ready');
   } catch (err) {
-    console.warn('Failed to initialize databases (may need manual setup):', err);
+    console.warn('Failed to initialize schemas (may need manual setup):', err);
   }
 
-  // 初始化服务
-  const sandboxManager = new SandboxManager(adapter);
-  const sqlExecutor = new SqlExecutor(adapter);
-  const auditLogger = new AuditLogger(adapter);
-  // TPC-C 性能测试服务（基于 adapter 抽象，未来可切换自研数据库）
-  const tpccRunner = new TPCCRunner(adapter);
+  // 初始化服务（演示沙箱基于 PostgreSQL）
+  const sandboxManager = new SandboxManager(pgAdapter);
+  const sqlExecutor = new SqlExecutor(pgAdapter);
+  const auditLogger = new AuditLogger(pgAdapter);
+  // TPC-C 性能测试服务（MySQL 版 + PostgreSQL 版）
+  const tpccRunner = new TPCCRunner(mysqlAdapter);
+  const tpccRunnerPG = new TPCCRunnerPG(pgAdapter);
   // 启动时预初始化 TPC-C 环境（建表+灌数据），用户点开始即可直接测试
   tpccRunner.preInitialize();
+  tpccRunnerPG.preInitialize();
 
   // 启动清理任务（清理时同步移除沙箱内存缓存，防止 Map 无限增长）
-  const cleanupScheduler = new CleanupScheduler(adapter);
+  const cleanupScheduler = new CleanupScheduler(pgAdapter);
   cleanupScheduler.onCleanup((sessionId) => sandboxManager.removeFromCache(sessionId));
   cleanupScheduler.start();
 
@@ -80,7 +86,7 @@ async function main(): Promise<void> {
   app.use('/api/v1/query', createSqlGuardMiddleware(sandboxManager));
 
   // 挂载路由
-  const routes = createRoutes(adapter, sandboxManager, sqlExecutor, auditLogger, cleanupScheduler, tpccRunner);
+  const routes = createRoutes(pgAdapter, sandboxManager, sqlExecutor, auditLogger, cleanupScheduler, tpccRunner, tpccRunnerPG);
   app.use('/api/v1', routes);
 
   // 全局错误处理
@@ -103,7 +109,8 @@ async function main(): Promise<void> {
   const shutdown = async () => {
     console.log('\nShutting down...');
     cleanupScheduler.stop();
-    await adapter.disconnect();
+    await pgAdapter.disconnect();
+    await mysqlAdapter.disconnect();
     process.exit(0);
   };
 

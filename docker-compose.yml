@@ -1,6 +1,23 @@
 version: '3.8'
 
 services:
+  postgres:
+    image: postgres:16
+    container_name: sqlplayground-postgres
+    environment:
+      POSTGRES_USER: playground
+      POSTGRES_PASSWORD: ${PG_PASSWORD:-playground_pass}
+      POSTGRES_DB: rucdbcloud
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./server/init-pg.sql:/docker-entrypoint-initdb.d/init-pg.sql
+    # 不对外暴露 5432（server 通过 Docker 内网 postgres 服务名访问）
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U playground -d rucdbcloud']
+      interval: 10s
+      retries: 5
+    restart: unless-stopped
+
   mysql:
     image: mysql:8.0
     container_name: sqlplayground-mysql
@@ -23,15 +40,25 @@ services:
     container_name: sqlplayground-server
     environment:
       NODE_ENV: production
+      # MySQL（TPC-C MySQL 选项）
       DB_HOST: mysql
       DB_PORT: 3306
       DB_USER: root
       DB_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-      # 低权限用户（仅沙箱库权限），用于执行用户提交的 SQL
       DB_APP_USER: playground_app
       DB_APP_PASSWORD: ${MYSQL_APP_PASSWORD:-playground_app_pass}
       DB_ADMIN_DATABASE: playground_admin
       DB_TEMPLATE_DATABASE: playground_template
+      # PostgreSQL（演示沙箱 + TPC-C PG 选项）
+      PG_HOST: postgres
+      PG_PORT: 5432
+      PG_USER: playground
+      PG_PASSWORD: ${PG_PASSWORD:-playground_pass}
+      PG_APP_USER: playground_app
+      PG_APP_PASSWORD: ${PG_APP_PASSWORD:-playground_app_pass}
+      PG_DATABASE: rucdbcloud
+      PG_TEMPLATE_SCHEMA: playground_template
+      PG_ADMIN_SCHEMA: playground_admin
       SESSION_TTL_HOURS: ${SESSION_TTL_HOURS:-24}
       PORT: 3001
       MAX_ROWS_PER_QUERY: 1000
@@ -44,6 +71,8 @@ services:
       - '3001:3001'
     depends_on:
       mysql:
+        condition: service_healthy
+      postgres:
         condition: service_healthy
     restart: unless-stopped
 
@@ -60,3 +89,4 @@ services:
 
 volumes:
   mysql_data:
+  pg_data:

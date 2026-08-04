@@ -93,25 +93,25 @@ class ApiService {
 
   // === TPC-C ===
 
-  async tpccStart(scale: string, durationSec: number): Promise<TPCStatus> {
+  async tpccStart(database: string, scale: string, durationSec: number): Promise<TPCStatus> {
     const res = await this.client.post<ApiResponse<{ status: TPCStatus }>>(
-      '/tpcc/start', { scale, durationSec }
+      '/tpcc/start', { database, scale, durationSec }
     );
     return res.data.data!.status;
   }
 
-  async tpccStatus(): Promise<TPCStatus> {
-    const res = await this.client.get<ApiResponse<TPCStatus>>('/tpcc/status');
+  async tpccStatus(database: string): Promise<TPCStatus> {
+    const res = await this.client.get<ApiResponse<TPCStatus>>(`/tpcc/status?database=${database}`);
     return res.data.data!;
   }
 
-  async tpccHistory(): Promise<TPCHistoryEntry[]> {
-    const res = await this.client.get<ApiResponse<{ history: TPCHistoryEntry[] }>>('/tpcc/history');
+  async tpccHistory(database: string): Promise<TPCHistoryEntry[]> {
+    const res = await this.client.get<ApiResponse<{ history: TPCHistoryEntry[] }>>(`/tpcc/history?database=${database}`);
     return res.data.data!.history;
   }
 
-  async tpccStop(): Promise<boolean> {
-    const res = await this.client.post<ApiResponse<{ stopped: boolean }>>('/tpcc/stop');
+  async tpccStop(database: string): Promise<boolean> {
+    const res = await this.client.post<ApiResponse<{ stopped: boolean }>>('/tpcc/stop', { database });
     return res.data.data!.stopped;
   }
 }
@@ -121,6 +121,7 @@ class ApiService {
 export interface TPCStatus {
   running: boolean;
   ready: boolean;
+  database: string;
   scale: 'small' | 'medium' | 'large' | null;
   progress: number;
   elapsedSec: number;
@@ -139,6 +140,7 @@ export interface TPCTransactionResult {
 
 export interface TPCHistoryEntry {
   id: string;
+  database: string;
   scale: 'small' | 'medium' | 'large';
   durationSec: number;
   warehouse: number;

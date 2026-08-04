@@ -2,71 +2,73 @@ import { IDatabaseAdapter } from '../adapters/database-adapter.interface';
 import { config } from '../config';
 
 /**
- * 模板数据加载器：负责初始化 playground_admin 和 playground_template 数据库。
+ * 模板数据加载器（PostgreSQL 版）。
+ * 负责初始化管理 schema（playground_admin）和模板 schema（playground_template）。
  */
 export class TemplateLoader {
-  constructor(private adapter: IDatabaseAdapter) {}
+  private adminSchema: string;
+  private templateSchema: string;
+
+  constructor(private adapter: IDatabaseAdapter) {
+    this.adminSchema = config.pg.adminSchema;
+    this.templateSchema = config.pg.templateSchema;
+  }
 
   /**
    * 完整初始化流程。应在服务器启动时调用。
    */
   async initialize(): Promise<void> {
-    await this.initAdminDatabase();
-    await this.initTemplateDatabase();
+    await this.initAdminSchema();
+    await this.initTemplateSchema();
   }
 
   /**
-   * 初始化管理库：sandboxes 表和 query_logs 表
+   * 初始化管理 schema：sandboxes 表和 query_logs 表
    */
-  private async initAdminDatabase(): Promise<void> {
-    const db = config.db.adminDatabase;
-
-    await this.adapter.createDatabase(db);
+  private async initAdminSchema(): Promise<void> {
+    await this.adapter.createDatabase(this.adminSchema);
 
     // sandboxes 表
     await this.adapter.execute(`
-      CREATE TABLE IF NOT EXISTS \`${db}\`.sandboxes (
-        id               BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+      CREATE TABLE IF NOT EXISTS "${this.adminSchema}".sandboxes (
+        id               BIGSERIAL PRIMARY KEY,
         session_id       VARCHAR(64)  NOT NULL UNIQUE,
         db_name          VARCHAR(128) NOT NULL UNIQUE,
-        status           ENUM('active','expired','cleaned') NOT NULL DEFAULT 'active',
-        created_at       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        last_accessed_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        expires_at       DATETIME     NOT NULL,
-        INDEX idx_status  (status),
-        INDEX idx_expires (expires_at)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        status           VARCHAR(20)  NOT NULL DEFAULT 'active',
+        created_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+        last_accessed_at TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+        expires_at       TIMESTAMPTZ  NOT NULL
+      )
     `);
+    await this.adapter.execute(`CREATE INDEX IF NOT EXISTS idx_sandboxes_status ON "${this.adminSchema}".sandboxes(status)`);
+    await this.adapter.execute(`CREATE INDEX IF NOT EXISTS idx_sandboxes_expires ON "${this.adminSchema}".sandboxes(expires_at)`);
 
     // query_logs 表（审计用）
     await this.adapter.execute(`
-      CREATE TABLE IF NOT EXISTS \`${db}\`.query_logs (
-        id            BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+      CREATE TABLE IF NOT EXISTS "${this.adminSchema}".query_logs (
+        id            BIGSERIAL PRIMARY KEY,
         session_id    VARCHAR(64) NOT NULL,
         sql_text      TEXT        NOT NULL,
         is_allowed    BOOLEAN     NOT NULL DEFAULT TRUE,
         error_message TEXT,
-        executed_at   DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        INDEX idx_session  (session_id),
-        INDEX idx_executed (executed_at)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        executed_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
     `);
+    await this.adapter.execute(`CREATE INDEX IF NOT EXISTS idx_query_logs_session ON "${this.adminSchema}".query_logs(session_id)`);
 
-    console.log(`Admin database '${db}' initialized`);
+    console.log(`Admin schema '${this.adminSchema}' initialized`);
   }
 
   /**
-   * 初始化模板库：employees 和 orders 表 + 示例数据
+   * 初始化模板 schema：employees 和 orders 表 + 示例数据
    */
-  private async initTemplateDatabase(): Promise<void> {
-    const db = config.db.templateDatabase;
-
-    await this.adapter.createDatabase(db);
+  private async initTemplateSchema(): Promise<void> {
+    await this.adapter.createDatabase(this.templateSchema);
 
     // employees 表
     await this.adapter.execute(`
-      CREATE TABLE IF NOT EXISTS \`${db}\`.employees (
-        id         INT           AUTO_INCREMENT PRIMARY KEY,
+      CREATE TABLE IF NOT EXISTS "${this.templateSchema}".employees (
+        id         SERIAL PRIMARY KEY,
         first_name VARCHAR(50)   NOT NULL,
         last_name  VARCHAR(50)   NOT NULL,
         email      VARCHAR(100)  NOT NULL UNIQUE,
@@ -74,37 +76,35 @@ export class TemplateLoader {
         salary     DECIMAL(10,2) NOT NULL,
         hire_date  DATE          NOT NULL,
         is_active  BOOLEAN       NOT NULL DEFAULT TRUE
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+      )
     `);
 
     // orders 表
     await this.adapter.execute(`
-      CREATE TABLE IF NOT EXISTS \`${db}\`.orders (
-        id          INT           AUTO_INCREMENT PRIMARY KEY,
+      CREATE TABLE IF NOT EXISTS "${this.templateSchema}".orders (
+        id          SERIAL PRIMARY KEY,
         employee_id INT           NOT NULL,
         customer    VARCHAR(100)  NOT NULL,
         product     VARCHAR(100)  NOT NULL,
         amount      DECIMAL(10,2) NOT NULL,
-        status      ENUM('pending','shipped','delivered','cancelled')
-                                 NOT NULL DEFAULT 'pending',
-        order_date  DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (employee_id) REFERENCES \`${db}\`.employees(id)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        status      VARCHAR(20)   NOT NULL DEFAULT 'pending',
+        order_date  TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+      )
     `);
 
-    // 插入示例数据（使用 INSERT IGNORE 避免重复）
-    await this.seedEmployees(db);
-    await this.seedOrders(db);
+    // 插入示例数据（ON CONFLICT DO NOTHING 避免重复）
+    await this.seedEmployees();
+    await this.seedOrders();
 
-    console.log(`Template database '${db}' initialized`);
+    console.log(`Template schema '${this.templateSchema}' initialized`);
   }
 
   /**
    * 填充员工数据
    */
-  private async seedEmployees(db: string): Promise<void> {
+  private async seedEmployees(): Promise<void> {
     const sql = `
-      INSERT IGNORE INTO \`${db}\`.employees
+      INSERT INTO "${this.templateSchema}".employees
         (id, first_name, last_name, email, department, salary, hire_date)
       VALUES
         (1,  '张', '伟', 'zhangwei@example.com',   '技术部', 15000.00, '2020-03-15'),
@@ -117,6 +117,7 @@ export class TemplateLoader {
         (8,  '黄', '丽', 'huangli@example.com',    '产品部', 15500.00, '2020-02-28'),
         (9,  '周', '涛', 'zhoutao@example.com',    '技术部', 19000.00, '2017-12-01'),
         (10, '吴', '芳', 'wufang@example.com',     '设计部', 13500.00, '2022-08-15')
+      ON CONFLICT (id) DO NOTHING
     `;
     await this.adapter.execute(sql);
   }
@@ -124,9 +125,9 @@ export class TemplateLoader {
   /**
    * 填充订单数据
    */
-  private async seedOrders(db: string): Promise<void> {
+  private async seedOrders(): Promise<void> {
     const sql = `
-      INSERT IGNORE INTO \`${db}\`.orders
+      INSERT INTO "${this.templateSchema}".orders
         (id, employee_id, customer, product, amount, status, order_date)
       VALUES
         (1,  1, '客户A', '软件许可',      50000.00,  'delivered', '2024-01-15 10:30:00'),
@@ -141,6 +142,7 @@ export class TemplateLoader {
         (10, 9, '客户J', '定制开发',     110000.00,  'pending',   '2024-07-01 09:30:00'),
         (11, 2, '客户K', '产品培训',      22000.00,  'delivered', '2024-07-10 14:00:00'),
         (12, 1, '客户L', '年度维护',      45000.00,  'shipped',   '2024-07-20 11:00:00')
+      ON CONFLICT (id) DO NOTHING
     `;
     await this.adapter.execute(sql);
   }

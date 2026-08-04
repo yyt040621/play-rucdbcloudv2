@@ -258,10 +258,13 @@ export function checkSqlAllowed(sql: string, allowedDb?: string): string | null 
 
 /**
  * 系统/管理库黑名单（用户绝不可访问）
+ * 同时覆盖 MySQL 库名与 PostgreSQL schema 名
  */
 const SYSTEM_DATABASES = [
   'mysql', 'information_schema', 'performance_schema', 'sys',
-  'playground_admin', 'playground_template', 'tpcc_benchmark',
+  'playground_admin', 'playground_template',
+  'tpcc_benchmark', 'tpcc_benchmark_mysql', 'tpcc_benchmark_pg',
+  'pg_catalog', 'public',
 ];
 
 /**

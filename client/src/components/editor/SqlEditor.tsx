@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { EditorView, keymap, placeholder } from '@codemirror/view';
 import { EditorState, Compartment } from '@codemirror/state';
-import { sql, MySQL } from '@codemirror/lang-sql';
+import { sql, PostgreSQL } from '@codemirror/lang-sql';
 import { oneDarkTheme } from '@codemirror/theme-one-dark';
 
 interface SqlEditorProps {
@@ -72,7 +72,7 @@ export function SqlEditor({ value, onChange, onExecute, theme }: SqlEditorProps)
     if (!editorRef.current || isInitialized.current) return;
 
     const extensions = [
-      sql({ dialect: MySQL }),
+      sql({ dialect: PostgreSQL }),
       placeholder('在这里输入 SQL 语句，例如：SELECT * FROM employees;'),
       keymap.of([
         {

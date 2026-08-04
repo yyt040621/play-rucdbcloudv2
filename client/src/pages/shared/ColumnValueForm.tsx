@@ -144,14 +144,14 @@ export function buildInsertSQL(
   const filled = Object.entries(values).filter(([, v]) => v.trim());
   if (filled.length === 0) return '';
 
-  const colNames = filled.map(([k]) => `\`${k}\``).join(', ');
+  const colNames = filled.map(([k]) => `"${k}"`).join(', ');
 
   const colValues = filled.map(([k, v]) => {
     const col = columns.find((c) => c.name === k);
     return formatSqlValue(v, col?.type);
   }).join(', ');
 
-  return `INSERT INTO \`${tableName}\` (${colNames})\nVALUES (${colValues});`;
+  return `INSERT INTO "${tableName}" (${colNames})\nVALUES (${colValues});`;
 }
 
 /**
@@ -164,7 +164,7 @@ export function buildSetClause(values: Record<string, string>, columns: ColumnIn
   return filled
     .map(([k, v]) => {
       const col = columns.find((c) => c.name === k);
-      return `  \`${k}\` = ${formatSqlValue(v, col?.type)}`;
+      return `  "${k}" = ${formatSqlValue(v, col?.type)}`;
     })
     .join(',\n');
 }
