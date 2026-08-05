@@ -13,7 +13,11 @@ RUN mkdir -p /dist \
 # 构建 MySQL 发行包（lib/ 内含 MySQL 驱动），合并到同一个 lib/
 RUN mvn -q clean package -DskipTests -P mysql -Ddescriptors=src/main/assembly/dir.xml \
     && cp -r target/benchbase-mysql /dist/mysql
-RUN mkdir -p /dist/final && cp -r /dist/postgres/* /dist/final/ && cp -rn /dist/mysql/lib/* /dist/final/lib/
+# 合并：以 postgres 发行包为基底，把 mysql 发行包里的所有依赖 jar 并入 lib/（不依赖目录结构）
+RUN mkdir -p /dist/final \
+ && cp -r /dist/postgres/. /dist/final/ \
+ && mkdir -p /dist/final/lib \
+ && find /dist/mysql -name '*.jar' ! -name 'benchbase.jar' -exec cp -n {} /dist/final/lib/ \;
 
 # ============ Stage 2: 编译 server（TypeScript） ============
 FROM node:20-alpine AS builder
