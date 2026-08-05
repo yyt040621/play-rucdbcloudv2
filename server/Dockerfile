@@ -1,5 +1,6 @@
 # ============ Stage 1: 构建 BenchBase（合并 MySQL + PostgreSQL 双驱动） ============
-FROM maven:3.9-eclipse-temurin-17 AS benchbase-builder
+# 注意：BenchBase 需要 JDK 23 编译（maven.compiler.release=23），必须用 temurin-23
+FROM maven:3.9-eclipse-temurin-23 AS benchbase-builder
 RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
 WORKDIR /build
 # 拉取官方 BenchBase（固定分支 main，构建产物含 config/data/scripts/lib）
@@ -20,10 +21,13 @@ COPY tsconfig.json ./
 COPY src/ ./src/
 RUN npm run build
 
-# ============ Stage 3: 运行时（Node + JRE + BenchBase） ============
+# ============ Stage 3: 运行时（Node 20 + JDK 23 + BenchBase） ============
 FROM node:20-alpine
-# 安装 Java 运行时（BenchBase 由 Node 以子进程方式拉起 java -cp ... com.oltpbenchmark.DBWorkload）
-RUN apk add --no-cache openjdk17-jre-headless
+# 直接把构建阶段的 JDK 23 拷进来（temurin 镜像 JAVA_HOME=/opt/java/openjdk），
+# 不依赖 Alpine 是否提供 openjdk23 包；BenchBase 需要 JRE 23 运行。
+COPY --from=benchbase-builder /opt/java/openjdk /usr/lib/jvm/java-23
+ENV JAVA_HOME=/usr/lib/jvm/java-23
+ENV PATH="${JAVA_HOME}/bin:${PATH}"
 WORKDIR /app
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
