@@ -69,6 +69,8 @@ export interface BenchHistoryEntry {
   database: string;
   scale: string;
   durationSec: number;
+  /** 总耗时（秒）：含建表 + 灌数据 + 执行 */
+  totalElapsedSec: number;
   warehouses: number;
   totalTransactions: number;
   tpm: number;
@@ -496,6 +498,7 @@ ${txnTypes}
       database: run.db,
       scale: run.scale,
       durationSec: run.durationSec,
+      totalElapsedSec: run.status.elapsedSec,
       warehouses: SCALE_WAREHOUSES[run.scale],
       totalTransactions: r?.totalTransactions || 0,
       tpm: Math.round(r?.tpmTOTAL || 0),

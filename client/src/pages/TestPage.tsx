@@ -12,7 +12,8 @@ const SCALE_OPTIONS = [
   { value: 'large', label: '大规模 (10 仓库)', desc: '约 3-5 分钟，更接近真实负载' },
 ];
 
-const DURATION_OPTIONS = [30, 60, 120];
+// 固定执行时长（BenchBase 的测量窗口），不暴露给用户选择
+const FIXED_DURATION_SEC = 60;
 
 const PHASE_LABEL: Record<string, string> = {
   idle: '未开始',
@@ -35,7 +36,6 @@ const PHASE_TONE: Record<string, string> = {
 export function TestPage() {
   const [database, setDatabase] = useState<'mysql' | 'pgsql'>('mysql');
   const [scale, setScale] = useState('small');
-  const [duration, setDuration] = useState(60);
   const [status, setStatus] = useState<BenchStatus | null>(null);
   const [result, setResult] = useState<BenchResult | null>(null);
   const [history, setHistory] = useState<TPCHistoryEntry[]>([]);
@@ -73,7 +73,7 @@ export function TestPage() {
     setError(null);
     setResult(null);
     try {
-      const s = await api.tpccStart(database, scale, duration);
+      const s = await api.tpccStart(database, scale, FIXED_DURATION_SEC);
       prevRunningRef.current = s.running;
       setStatus(s);
     } catch (err) {
@@ -81,7 +81,7 @@ export function TestPage() {
     } finally {
       setStarting(false);
     }
-  }, [database, scale, duration]);
+  }, [database, scale]);
 
   const handleStop = useCallback(async () => {
     try { await api.tpccStop(database); } catch { /* 静默 */ }
@@ -158,32 +158,6 @@ export function TestPage() {
                 </label>
               ))}
             </div>
-          </div>
-
-          {/* 时长 */}
-          <div>
-            <span className="block text-[13px] font-semibold text-[var(--text-primary)]">
-              执行时长
-            </span>
-            <div className="mt-2 flex gap-2">
-              {DURATION_OPTIONS.map((d) => (
-                <button
-                  key={d}
-                  onClick={() => setDuration(d)}
-                  disabled={isRunning}
-                  className={`flex-1 px-3 py-2 text-sm rounded-lg border cursor-pointer transition-colors
-                    ${duration === d
-                      ? 'bg-[var(--primary-bg)] border-[var(--primary)] text-[var(--primary)] font-medium'
-                      : 'border-[var(--border-color)] text-[var(--text-secondary)] hover:border-[var(--primary)]/30'
-                    }`}
-                >
-                  {d}秒
-                </button>
-              ))}
-            </div>
-            <p className="mt-1.5 text-[11px] text-[var(--text-secondary)] leading-relaxed">
-              执行阶段时长。开始前还需建表 + 灌数据，总耗时 ≈ 执行时长 + 1~2 分钟（MySQL 更久）。
-            </p>
           </div>
 
           {/* 控制按钮 */}
@@ -278,7 +252,7 @@ export function TestPage() {
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs text-[var(--text-secondary)]">
                     <div>数据库：{result.database === 'pgsql' ? 'PostgreSQL' : 'MySQL'}</div>
                     <div>规模：{result.scale}（{result.warehouses} 仓库）</div>
-                    <div>执行时长：{result.durationSec}s{result.totalElapsedSec != null && result.totalElapsedSec > 0 ? `（总耗时 ${result.totalElapsedSec}s）` : ''}</div>
+                    <div>总耗时：{result.totalElapsedSec != null && result.totalElapsedSec > 0 ? `${result.totalElapsedSec}s` : `${result.durationSec}s`}</div>
                     <div>总事务数：{(result.totalTransactions ?? 0).toLocaleString()}</div>
                   </div>
                 </div>
@@ -303,7 +277,7 @@ export function TestPage() {
                           TPM <span className="text-[var(--primary)] font-bold">{(h.tpm ?? 0).toLocaleString()}</span>
                         </div>
                         <div className="text-[11px] text-[var(--text-secondary)]">
-                          {h.database === 'pgsql' ? 'PostgreSQL' : 'MySQL'} · {h.scale} · {h.warehouses} 仓库 · {h.durationSec}s · {h.totalTransactions} 事务 · 平均 {h.avgLatencyMs}ms
+                          {h.database === 'pgsql' ? 'PostgreSQL' : 'MySQL'} · {h.scale} · {h.warehouses} 仓库 · 总耗时 {h.totalElapsedSec != null && h.totalElapsedSec > 0 ? `${h.totalElapsedSec}s` : `${h.durationSec}s`} · {h.totalTransactions} 事务 · 平均 {h.avgLatencyMs}ms
                         </div>
                       </div>
                       <div className="text-[11px] text-[var(--text-secondary)]">

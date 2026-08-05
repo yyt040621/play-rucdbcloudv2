@@ -166,6 +166,8 @@ export interface TPCHistoryEntry {
   database: string;
   scale: string;
   durationSec: number;
+  /** 总耗时（秒）：含建表 + 灌数据 + 执行 */
+  totalElapsedSec: number;
   warehouses: number;
   totalTransactions: number;
   tpm: number;
