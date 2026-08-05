@@ -113,6 +113,8 @@ interface RunningRun {
  */
 export class BenchBaseRunner {
   private current: RunningRun | null = null;
+  /** 每个数据库最近一轮的最终状态/结果（进程结束后仍可查询） */
+  private lastByDb: Partial<Record<TPCDatabase, { status: BenchStatus; result: BenchResult | null }>> = {};
   private history: BenchHistoryEntry[] = [];
 
   getStatus(db: TPCDatabase): BenchStatus {
@@ -121,13 +123,12 @@ export class BenchBaseRunner {
       s.elapsedSec = Math.round((Date.now() - this.current.startedAt) / 1000);
       return s;
     }
-    return this.idleStatus(db);
+    return this.lastByDb[db]?.status || this.idleStatus(db);
   }
 
   getResult(db: TPCDatabase): BenchResult | null {
-    if (this.current && this.current.db === db && this.current.status.phase === 'done') {
-      return this.current.result;
-    }
+    const last = this.lastByDb[db];
+    if (last && last.status.phase === 'done') return last.result;
     return null;
   }
 
@@ -207,6 +208,7 @@ export class BenchBaseRunner {
     });
     run.proc.on('exit', (code) => {
       status.running = false;
+      status.elapsedSec = Math.round((Date.now() - run.startedAt) / 1000);
       status.progressHint = stdoutTail.slice(-600).split('\n').filter(Boolean).slice(-6).join('\n');
       if (code === 0) {
         status.phase = 'done';
@@ -217,6 +219,8 @@ export class BenchBaseRunner {
         status.phase = 'error';
         status.message = status.message || `BenchBase 退出码 ${code}`;
       }
+      // 保留本轮最终状态与结果，供前端在结束后查询
+      this.lastByDb[run.db] = { status, result: run.result };
       this.current = null;
     });
 
