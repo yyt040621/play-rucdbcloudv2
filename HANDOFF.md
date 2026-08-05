@@ -1,109 +1,171 @@
 # 🤝 项目交接文档（HANDOFF）
 
-> 记录当前工作进度、卡点、待办与踩坑经验。本仓库为 **v2 线**（新界面 + BenchBase 压测），v1 主仓库（旧版部署）不受影响。
+> 本仓库为 **v2 线**（当前主线）。v1 主仓库（旧版部署）不受影响。
+> **机密信息（服务器密码 / 数据库密码）不在此文件中，见本地 `SERVER_SECRETS.md`（已 gitignore，勿提交）。**
 
 ---
 
-## 1️⃣ 我们在做什么任务
+## 1️⃣ 我们在做什么
 
-**用 CMU 开源的 BenchBase 替换项目自研的 TPC-C 压测引擎**，改造「性能测试」页：每次选择一个数据库（MySQL 或 PostgreSQL）跑标准 TPC-C 基准，展示最终报告（tpmC / TPM / 延迟分位数）。
+**rucdbcloud —— SQL Playground**：一款面向数据库学习与演示的**在线 SQL 交互式操作平台**，内置 **TPC-C 数据库性能基准测试**。
 
-- 这是整个项目当前的主线任务。
-- 背景：项目已先后完成「前端现代化改版」「后端 PostgreSQL 数据修复」「v1/v2 双部署」「README 文档」。
+- 浏览器打开即可用，无需自己装数据库：查表、建表、增删改、跑真实压测（CMU BenchBase）。
+- 每个用户一个**独立沙箱**（PostgreSQL schema 隔离），互不可见、互不影响。
+- 压测支持 **PostgreSQL + MySQL 双数据库**，选一个跑标准 TPC-C，输出 tpmC / TPM / 延迟分位 / 总耗时。
 
-## 2️⃣ 我们已经完成了什么
+### 项目当前状态
 
-### 已完成并部署（v2 线上 8081 可访问）
+**主线功能已全部完成并上线部署**（当前部署在 `10.77.110.145`，详见 §3）。最近里程碑：
 
-| 事项 | 状态 | 说明 |
-|---|---|---|
-| 后端修复：PostgreSQL IDENTITY 沙箱数据为空 | ✅ 已上线 | 模板种子/克隆不再显式插入主键，`employees=10 / orders=12` 恢复 |
-| 前端 UI 现代化改版（阿里云风浅色） | ✅ 已上线 v2 | 首页落地页 hero、白卡控制台、SVG 图标、去深色模式 |
-| v1 / v2 双仓库 + 双栈部署 | ✅ 已上线 | v1 旧站 8080；v2 新站 8081 / 后端 3002，互不影响 |
-| 完整 README 文档 | ✅ 已推送 v2 仓库 | 面向入门级的项目说明 |
+1. ✅ 前端现代化改版（阿里云风浅色界面）
+2. ✅ 后端 PostgreSQL 沙箱数据修复（IDENTITY 种子/克隆）
+3. ✅ **BenchBase 压测完全跑通**（PG + MySQL 双库验证通过、结果完整解析）
+4. ✅ 压测页交互简化：删除执行时长选择器，固定 60s，结果卡/历史显示「总耗时」
+5. ✅ 功能演示页改为与首页一致的 hero 风格
+6. ✅ README / 部署 compose / 服务器源码目录全部同步
 
-### BenchBase 替换（代码已完成，验证中）
+---
 
-| 子项 | 状态 |
-|---|---|
-| `server/Dockerfile` 多阶段构建（JDK 23 + BenchBase 双驱动合并） | ✅ 镜像构建成功 |
-| `server/src/services/benchbase-runner.ts`（配置生成/spawn/监控/结果解析/history） | ✅ 完成 |
-| `tpcc` 路由改 BenchBase、删除自研 runner（约 900 行） | ✅ 完成 |
-| 启动时确保专用 `benchbase` 数据库存在 | ✅ 完成 |
-| 前端 `TestPage.tsx` 重写（单库选择 + 阶段徽标 + 最终报告） | ✅ 完成 |
-| 服务器镜像实际构建 + 容器重启 | ✅ 成功 |
+## 2️⃣ 系统流程和构成
 
-## 3️⃣ 我们现在卡在哪里
+### 2.1 架构总览
 
-**卡在 BenchBase 实际运行的最后一公里**——java 进程能起来，但多次遇到运行时问题，已连续修复 5 轮，**刚改完最后一处，尚未验证**：
-
-1. ✅ **JDK 版本**：`invalid target release: 23` → 构建镜像从 JDK 17 升到 23（`maven:3.9-eclipse-temurin-23`）。
-2. ✅ **发行包目录**：Maven 默认只出 tgz/zip → 加 `-Ddescriptors=src/main/assembly/dir.xml`。
-3. ✅ **glibc/musl 不兼容**：Alpine 跑 Ubuntu 的 JDK → `java: not found` → 运行时基镜像改为 `eclipse-temurin:23-jre`，Node 用官方 tarball 装。
-4. ✅ **benchbase.jar 定位**：发行包结构嵌套 → 用 `find` 平铺到 `/opt/benchbase/benchbase.jar`。
-5. ✅ **config/plugin.xml 缺失**：BenchBase 启动要按相对路径找 `config/plugin.xml` → 已改为**从源码直接拷贝** `config/`，runner 的 `cwd` 设为发行包根目录、配置走绝对路径。
-6. ⏳ **待验证**：在服务器跑一次 pgsql 小规模测试，确认 `phase="done"`、`tpmTOTAL>0`、结果 JSON 能解析。
-
-> 此外：我的**远程执行工具间歇性故障**（安全分类器不可用），导致部分验证命令需要用户在服务器 SSH 里手动跑。
-
-## 4️⃣ 还有哪些任务没完成
-
-- [ ] **验证 BenchBase pgsql 端**：跑 `small` 20s，确认 `phase=done` + `tpmTOTAL>0` + 结果解析正确（命令见下文「怎么继续」）。
-- [ ] **验证 MySQL 端**：同样跑一次 `mysql`，确认双驱动（lib/ 里已有 `mysql-connector-java`）能连能跑。
-- [ ] **前端验收**：浏览器 8081 → 性能测试页 → 点开始 → 跑完看到报告卡片。
-- [ ] **调大单 IP 沙箱配额**：`MAX_SANDBOXES_PER_IP=3` 对演示站太紧（同 IP 第 4 个访客就 429），建议改成 50 左右（改 `docker-compose.v2.yml`）。
-- [ ] **处理 v2 重启时的模板种子告警**：`Failed to initialize schemas ... duplicate key ... employees_email_key`（非致命，但日志噪音；模板已有数据，沙箱不受影响）。
-- [ ] **更新 README**：把「性能测试」章节从自研 TPC-C 改为 BenchBase 说明。
-- [ ] **收尾提交**：验证通过后补齐提交（当前工作区已全部提交，验证中若有改动需再 commit）。
-
-## 5️⃣ 踩过的坑（不要再踩）
-
-1. **BenchBase 必须 JDK 23 编译**（pom 里 `maven.compiler.release=23`）。JDK 17 直接报 `invalid target release: 23`。构建用 `maven:3.9-eclipse-temurin-23`。
-2. **不能把 glibc 的 JDK 拷进 Alpine（musl）运行时**：`java` 会报 `not found`（实际是动态链接器缺失）。运行时基镜像必须 glibc：`eclipse-temurin:23-jre`，Node 用官方 tarball（`node-v20.x-linux-x64.tar.xz`）装，别 `apk add nodejs`（版本不可控）。
-3. **BenchBase 发行包默认只出 tgz/zip，不出目录**：必须 `-Ddescriptors=src/main/assembly/dir.xml`。
-4. **发行包目录结构不可靠（会嵌套）**：不要假定路径，用 `find` 定位 `benchbase.jar` 平铺到 `/opt/benchbase/benchbase.jar`，双驱动 jar 用 `find -exec cp` 合并进 `lib/`。
-5. **BenchBase 运行依赖 `config/plugin.xml`（相对 CWD 查找）**：必须把源码 `config/` 目录拷进发行包（`cp -r /build/benchbase/config /dist/final/config`），且 runner 的 `cwd` 设为发行包根目录，工作配置用**绝对路径** `-c` 传入。
-6. **runner 状态保留**：进程退出后 `this.current` 置空会导致前端查状态变成 idle、结果丢失。必须用 `lastByDb` 保留每库最近一轮的 status/result。
-7. **单 IP 沙箱配额=3 是测试/演示的大坑**：同一 IP（含服务器 localhost 自测）第 4 个会话就 429「每个 IP 最多同时创建 3 个沙箱」。清测试沙箱需要直接改生产库（`docker exec ... psql UPDATE playground_admin.sandboxes`），**这类操作会被安全分类器拦截，需用户明确授权**。
-8. **本机 Docker Hub API 被限流**：查镜像 tag 会失败，靠服务器实际 `docker pull` 验证即可（`maven:3.9-eclipse-temurin-23`、`eclipse-temurin:23-jre` 都存在）。
-9. **构建迭代慢**：每次改 Dockerfile 会失效 Maven 层（重下载依赖，约 4-7 分钟）。只改小步骤（如合并/拷贝）时尽量不动 Maven 构建命令，可复用缓存。
-10. **v2 重启时模板种子可能报 duplicate email**：seed 用 `ON CONFLICT (id)` 但 email 唯一键可能冲突，属非致命告警；不影响已建沙箱。
-
-## 📌 关键信息备忘
-
-- **服务器**：`123.57.84.92`（root），项目 `/root/sqlplayground-v2`（v2 线）。
-- **端口**：v1 前端 8080 / 后端 3001；v2 前端 8081 / 后端 3002。
-- **仓库**：v1 `yyt040621/rucdbcloud.playground`（只到后端修复）；v2 `yyt040621/play-rucdbcloudv2`（当前主线，含前端改版 + README + BenchBase）。
-- **v2 栈命令**：`cd /root/sqlplayground-v2 && docker compose -f docker-compose.v2.yml up -d --build server`（重建 server；Maven 层已缓存则很快）。
-- **关键文件**：
-  - `server/Dockerfile`（JDK23 + BenchBase 构建）
-  - `server/src/services/benchbase-runner.ts`（压测执行器）
-  - `server/src/routes/tpcc.routes.ts`（start/status/result/history/stop）
-  - `client/src/pages/TestPage.tsx`（性能测试页）
-  - `server/src/config/index.ts`（`benchbase` 配置段）
-- **镜像内 BenchBase 布局**：`/opt/benchbase/benchbase.jar` + `/opt/benchbase/lib/*.jar`（含 PG+MySQL 双驱动）+ `/opt/benchbase/config/plugin.xml`。
-
-## ▶️ 怎么继续（下一个执行者）
-
-```bash
-# 在服务器 SSH 里（root@123.57.84.92）：
-# 1) 清测试沙箱释放单 IP 配额
-docker exec sqlplayground-v2-postgres psql -U playground -d rucdbcloud \
-  -c "UPDATE playground_admin.sandboxes SET status='cleaned' WHERE status='active';"
-
-# 2) 确认 config/plugin.xml 已就位
-docker exec sqlplayground-v2-server ls /opt/benchbase/config/plugin.xml
-
-# 3) 跑一次 pgsql 小规模 20 秒测试
-SID=$(curl -s -X POST http://localhost:3002/api/v1/session | sed 's/.*"sessionId":"\([^"]*\)".*/\1/')
-curl -s -X POST -H "X-Session-Id: $SID" -H "Content-Type: application/json" \
-  -d '{"database":"pgsql","scale":"small","durationSec":20}' \
-  http://localhost:3002/api/v1/tpcc/start
-
-# 4) 等约 70 秒后查状态与结果
-sleep 70
-curl -s -H "X-Session-Id: $SID" "http://localhost:3002/api/v1/tpcc/status?database=pgsql"; echo
-curl -s -H "X-Session-Id: $SID" "http://localhost:3002/api/v1/tpcc/result?database=pgsql"; echo
+```
+浏览器
+  │  80/8081（nginx 静态 + /api 反代）
+  ▼
+nginx 容器 (client) ──/api/──▶ Express 后端容器 (server:3001)
+                                  │
+                    ┌─────────────┼──────────────┐
+                    ▼             ▼              ▼
+            PostgreSQL 16    MySQL 8.0     BenchBase 压测引擎
+           (每用户一 schema  (TPC-C 被测    (JDK 23, 进程内跑
+            的沙箱隔离)       对象)          TPC-C 事务)
 ```
 
-**成功判据**：status `phase="done"`、result `tpmTOTAL>0`。若仍 `error`，把 message 发给上一执行者继续修。
+- **前端**：React 19 + TypeScript + Vite 8 + Tailwind 3 + CodeMirror 6，路由级代码分割。
+- **后端**：Node 20 + Express 4，自定义 SQL 解析器（白名单+黑名单）、express-rate-limit 限流、schema 隔离沙箱。
+- **数据库**：PostgreSQL 16（主，沙箱隔离）+ MySQL 8.0（副，压测被测）。
+- **压测**：CMU BenchBase（Java/Maven），PostgreSQL + MySQL 双驱动，`/opt/benchbase/benchbase.jar`。
+
+### 2.2 代码结构
+
+```
+rucdbcloud/
+├── client/                    # 前端 (React + TS + Vite)
+│   └── src/
+│       ├── pages/             # Home/Test/Demo/Select/Create/Update/Delete
+│       ├── components/        # ui/ editor/ layout/ result/ sidebar/ common/
+│       ├── hooks/             # useSession / useSchema / useSqlExecute
+│       └── services/api.ts    # 所有后端 API 封装 + 类型定义
+├── server/                    # 后端 (Node + Express + TS)
+│   └── src/
+│       ├── adapters/          # IDatabaseAdapter (PostgreSQL / MySQL)
+│       ├── routes/            # session / schema / query / tpcc
+│       ├── services/
+│       │   ├── benchbase-runner.ts   # ★ 压测执行器（配置生成/spawn/监控/解析/history）
+│       │   ├── sandbox-manager.ts    # 沙箱生命周期管理
+│       │   ├── sql-*.ts              # SQL 解析与安全守卫
+│       │   └── template-loader.ts    # 模板种子数据（employees/orders）
+│       ├── middleware/        # 限流 / 安全头 / session
+│       └── config/            # benchbase 配置段
+├── docker-compose.deploy.yml  # ★ 部署用（预载镜像，不 build）
+├── docker-compose.yml         # 本地一键启动 (v1 端口)
+├── docker-compose.v2.yml      # 独立预览栈 (v2 端口)
+└── .env.example               # 环境变量模板
+```
+
+### 2.3 部署拓扑（当前）
+
+| 服务器 | 角色 | 状态 |
+|---|---|---|
+| `10.77.110.145` (gp-seg1) | **当前 v2 部署**：docker compose（client 80/8081、server 3002、postgres、mysql） | ✅ 运行中 |
+| `10.77.110.144` (gp-master) | TiDB 集群节点（tikv+tiflash 常驻），非开发机 | ⚠️ 别乱部署 |
+| `123.57.84.92` | 旧生产（v1 8080 / v2 8081），GitHub 被墙 | 旧环境 |
+
+### 2.4 开发→上线工作流（关键！）
+
+```
+① 本地（Windows）改代码
+② git add + git commit        ← 版本控制、可回滚
+③ git push v2 main            ← 推 GitHub（备份/协作）
+④ 本地编译：cd client && npm run build
+⑤ 部署到 .145：
+     docker cp dist 进 client 容器（热更新）   ← 日常改前端
+     或 tar 打包 scp → 服务器解压（同步源码目录）← 改后端/结构时
+```
+
+**⚠️ 两个远程仓库（大坑）**：本地 `main` 跟踪的是 `origin`（旧仓库 `rucdbcloud.playground`），但**当前主线在 `v2`（`play-rucdbcloudv2`）**。直接 `git push` 会推到旧仓库！**必须 `git push v2 main`**。
+
+---
+
+## 3️⃣ 注意事项 / 踩坑经验（不要再踩）
+
+### 3.1 部署类
+
+1. **.145 访问 GitHub 被限速**（~26KB/s）→ 镜像用「从 .92 docker save → scp → load」迁移；日常改代码用**本地 build + docker cp 热更新**，不重建镜像。
+2. **`.env` 密码必须匹配 `playground_app_pass`**：init SQL 硬编码 app 密码，若 `.env` 不同会导致沙箱查询报 `password authentication failed`。`.env` 备份在本地 `.env.server145`（已 gitignore）。
+3. **docker cp 嵌套坑**：`docker cp 源目录/. 容器:/app/dist/` 可能生成 `/app/dist/dist/`，新代码不生效。先 `rm -rf 容器内/dist` 再拷。
+4. **服务器源码目录 `/home/yyt/rucdbcloud` 非 git 仓库**，是拷贝副本。容器重建会回退到旧代码 → 改代码后记得把源码目录也同步（tar 管道，**排除 `.env`**）。
+5. **BenchBase URL 的 `&` 必须转义为 `&amp;`**，否则 SAXParseException（已修复在 benchbase-runner.ts）。
+6. **BenchBase 结果解析**：必须读 `summary.json`（Measured Requests/Throughput/Latency 微秒）+ `results.<Txn>.csv`（per-txn）。旧解析器按自定义 key 匹配全落空。
+7. **单 IP 沙箱配额 = 50**（`MAX_SANDBOXES_PER_IP`），全局 200，演示够用。
+
+### 3.2 网络 / 环境类
+
+8. **aTrust VPN 下 SSH 不稳**：`kex_exchange_identification / Software caused connection abort` 会间歇出现 → 重试（通常 1-3 次内成功）。
+9. **.144 (gp-master) 是 TiDB 节点**：占约 75G 内存、8 块 17TB 盘，别当干净开发机乱部署；yyt 无 docker/sudo。
+10. **Windows 本机 bash 里无 rsync** → 同步用 tar 管道；PowerShell 中文输出乱码 → 加 `| iconv -f GBK -t UTF-8`。
+
+### 3.3 开发类
+
+11. **模板种子幂等**：employees 用 `ON CONFLICT (email)`（id 是 IDENTITY 不能 ON CONFLICT(id)）；orders 无唯一键须「表空才插」（VALUES 子查询里 order_date 要 `::timestamptz` 显式转换）。
+12. **前端 bundle 防空**：结果字段可能为空，`toLocaleString()` 前加 `?? 0` 兜底，否则部署旧版会崩 `Cannot read properties of undefined`。
+13. **压测时长**：`durationSec` 是测量窗口（默认 60s），真实总耗时还含建表+灌数据。前端结果卡/历史显示 `totalElapsedSec`（总耗时）。
+
+---
+
+## 4️⃣ 服务器与账户清单
+
+> 密码等机密见本地 `SERVER_SECRETS.md`（本仓库 `.gitignore` 已忽略，不会提交）。
+
+| 服务器 | SSH 用户 | 用途 | 关键路径 |
+|---|---|---|---|
+| `10.77.110.145` (gp-seg1) | yyt | **当前 v2 部署** | `/home/yyt/rucdbcloud`，compose: `docker-compose.deploy.yml` |
+| `10.77.110.144` (gp-master) | yyt | TiDB 集群节点 | 非开发机，勿动 |
+| `123.57.84.92` | root | 旧生产 | `/root/sqlplayground`（v1）、`/root/sqlplayground-v2`（v2） |
+
+**端口**：当前部署 client 前端 `80`/`8081`，server 后端 `3002`（容器内 3001）。
+**GitHub 仓库**：`yyt040621/play-rucdbcloudv2`（主线）；`yyt040621/rucdbcloud.playground`（旧）。
+
+---
+
+## 5️⃣ 常用命令速查
+
+```bash
+# 查看容器状态（.145）
+ssh yyt@10.77.110.145 "docker ps"
+
+# 后端日志
+ssh yyt@10.77.110.145 "docker logs --tail 100 sqlplayground-v2-server"
+
+# 前端热更新（本地 build 后）
+scp -r dist 相关文件 到 /tmp → docker cp 进 sqlplayground-v2-client
+
+# 同步源码目录（改代码后，排除 .env）
+tar czf sync.tar.gz --exclude='.git' --exclude='node_modules' --exclude='.env' --exclude='.claude' .
+scp sync.tar.gz yyt@10.77.110.145:/tmp/
+ssh yyt@10.77.110.145 "cd /home/yyt/rucdbcloud && tar xzf /tmp/sync.tar.gz --no-overwrite-dir"
+
+# 提交并推送（⚠️ 推 v2，不是 origin）
+git add . && git commit -m "..." && git push v2 main
+```
+
+---
+
+## ▶️ 下一个执行者怎么继续
+
+1. **跑通压测**：浏览器开 `http://10.77.110.145` → 「性能测试」→ 选 MySQL 或 PostgreSQL → 选规模 → 开始测试 → 等阶段徽标走完 → 看结果卡（tpmC/TPM/延迟/总耗时）。
+2. **改前端**：本地改 → `cd client && npm run build` → docker cp 进容器 → 刷新验证。
+3. **改后端**：本地改 → 重新打包镜像或 docker cp 编译产物 → 重启 server 容器 → 看日志。
+4. **遇到问题**：先看 `docker logs sqlplayground-v2-server`，压测报错看 message 字段，不确定就把错误发回。

@@ -11,6 +11,12 @@ server/dist/
 .env.production
 .env.server*
 
+# Secrets（含服务器/数据库密码，绝不提交）
+SERVER_SECRETS.md
+
+# 本机运维备份（开机自启注册表快照等）
+.claude-backup/
+
 # IDE
 .vscode/
 .idea/
