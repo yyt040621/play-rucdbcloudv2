@@ -162,7 +162,7 @@ export class BenchBaseRunner {
       '-cp', cp,
       'com.oltpbenchmark.DBWorkload',
       '-b', 'tpcc',
-      '-c', 'tpcc_config.xml',
+      '-c', path.join(workdir, 'tpcc_config.xml'),
       '--create=true', '--load=true', '--execute=true',
       '-im', String(MONITOR_INTERVAL_MS),
       '-d', path.join(workdir, 'results'),
@@ -180,7 +180,8 @@ export class BenchBaseRunner {
 
     const run: RunningRun = {
       db, scale, durationSec, workdir,
-      proc: spawn('java', args, { cwd: workdir }),
+      // cwd 用发行包根目录：BenchBase 需要按相对路径找到 config/plugin.xml
+      proc: spawn('java', args, { cwd: home }),
       status,
       startedAt: Date.now(),
       result: null,
