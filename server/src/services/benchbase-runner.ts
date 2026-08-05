@@ -51,6 +51,8 @@ export interface BenchResult {
   database: TPCDatabase;
   scale: string;
   durationSec: number;
+  /** 总耗时（秒）：含建表 + 灌数据 + 执行，由完成时记录 */
+  totalElapsedSec: number;
   warehouses: number;
   tpmC: number;
   tpmTOTAL: number;
@@ -215,6 +217,8 @@ export class BenchBaseRunner {
         status.phase = 'done';
         status.message = null;
         run.result = this.parseResults(run);
+        // 记录总耗时（含建表/灌数据/执行），供前端展示真实运行时长
+        if (run.result) run.result.totalElapsedSec = status.elapsedSec;
         this.recordHistory(run);
       } else {
         status.phase = 'error';
@@ -309,6 +313,7 @@ ${txnTypes}
       database: run.db,
       scale: run.scale,
       durationSec: run.durationSec,
+      totalElapsedSec: 0,
       warehouses: SCALE_WAREHOUSES[run.scale],
       tpmC: 0,
       tpmTOTAL: 0,

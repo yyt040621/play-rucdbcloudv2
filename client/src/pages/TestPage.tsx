@@ -163,7 +163,7 @@ export function TestPage() {
           {/* 时长 */}
           <div>
             <span className="block text-[13px] font-semibold text-[var(--text-primary)]">
-              测试时长
+              执行时长
             </span>
             <div className="mt-2 flex gap-2">
               {DURATION_OPTIONS.map((d) => (
@@ -181,6 +181,9 @@ export function TestPage() {
                 </button>
               ))}
             </div>
+            <p className="mt-1.5 text-[11px] text-[var(--text-secondary)] leading-relaxed">
+              执行阶段时长。开始前还需建表 + 灌数据，总耗时 ≈ 执行时长 + 1~2 分钟（MySQL 更久）。
+            </p>
           </div>
 
           {/* 控制按钮 */}
@@ -275,7 +278,7 @@ export function TestPage() {
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs text-[var(--text-secondary)]">
                     <div>数据库：{result.database === 'pgsql' ? 'PostgreSQL' : 'MySQL'}</div>
                     <div>规模：{result.scale}（{result.warehouses} 仓库）</div>
-                    <div>时长：{result.durationSec}s</div>
+                    <div>执行时长：{result.durationSec}s{result.totalElapsedSec != null && result.totalElapsedSec > 0 ? `（总耗时 ${result.totalElapsedSec}s）` : ''}</div>
                     <div>总事务数：{(result.totalTransactions ?? 0).toLocaleString()}</div>
                   </div>
                 </div>

@@ -148,6 +148,8 @@ export interface BenchResult {
   database: string;
   scale: string;
   durationSec: number;
+  /** 总耗时（秒）：含建表 + 灌数据 + 执行 */
+  totalElapsedSec: number;
   warehouses: number;
   tpmC: number;
   tpmTOTAL: number;
