@@ -127,7 +127,7 @@ export class TemplateLoader {
         ('黄', '丽', 'huangli@example.com',    '产品部', 15500.00, '2020-02-28'),
         ('周', '涛', 'zhoutao@example.com',    '技术部', 19000.00, '2017-12-01'),
         ('吴', '芳', 'wufang@example.com',     '设计部', 13500.00, '2022-08-15')
-      ON CONFLICT (id) DO NOTHING
+      ON CONFLICT (email) DO NOTHING
     `;
     await this.adapter.execute(sql);
   }
@@ -137,10 +137,14 @@ export class TemplateLoader {
    * 同 seedEmployees：不显式插入 id，由 IDENTITY 自动生成（1..12）。
    */
   private async seedOrders(): Promise<void> {
+    // orders 无唯一键（只有 IDENTITY 主键），重启重复 INSERT 会无限叠加。
+    // 改为"表空才插入"保证幂等：INSERT ... SELECT ... WHERE NOT EXISTS
     const sql = `
       INSERT INTO "${this.templateSchema}".orders
         (employee_id, customer, product, amount, status, order_date)
-      VALUES
+      SELECT v.employee_id, v.customer, v.product, v.amount, v.status,
+             v.order_date::timestamptz
+      FROM (VALUES
         (1, '客户A', '软件许可',      50000.00,  'delivered', '2024-01-15 10:30:00'),
         (2, '客户B', '技术咨询',      30000.00,  'shipped',   '2024-02-20 14:00:00'),
         (1, '客户C', '定制开发',     120000.00,  'pending',   '2024-03-10 09:00:00'),
@@ -153,7 +157,8 @@ export class TemplateLoader {
         (9, '客户J', '定制开发',     110000.00,  'pending',   '2024-07-01 09:30:00'),
         (2, '客户K', '产品培训',      22000.00,  'delivered', '2024-07-10 14:00:00'),
         (1, '客户L', '年度维护',      45000.00,  'shipped',   '2024-07-20 11:00:00')
-      ON CONFLICT (id) DO NOTHING
+      ) AS v(employee_id, customer, product, amount, status, order_date)
+      WHERE NOT EXISTS (SELECT 1 FROM "${this.templateSchema}".orders)
     `;
     await this.adapter.execute(sql);
   }

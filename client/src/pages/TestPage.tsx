@@ -260,8 +260,8 @@ export function TestPage() {
             {result && (
               <div className="space-y-4">
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  <StatCard label="TPM（总吞吐）" value={Math.round(result.tpmTOTAL).toLocaleString()} hint="每分钟事务数" accent="primary" />
-                  <StatCard label="tpmC" value={Math.round(result.tpmC).toLocaleString()} hint="NewOrder 吞吐" accent="success" />
+                  <StatCard label="TPM（总吞吐）" value={Math.round(result.tpmTOTAL ?? 0).toLocaleString()} hint="每分钟事务数" accent="primary" />
+                  <StatCard label="tpmC" value={Math.round(result.tpmC ?? 0).toLocaleString()} hint="NewOrder 吞吐" accent="success" />
                   <StatCard label="平均延迟" value={`${result.avgLatencyMs}`} hint="毫秒" accent="warning" />
                   <StatCard label="P99 延迟" value={`${result.p99LatencyMs}`} hint="毫秒" accent="error" />
                 </div>
@@ -276,7 +276,7 @@ export function TestPage() {
                     <div>数据库：{result.database === 'pgsql' ? 'PostgreSQL' : 'MySQL'}</div>
                     <div>规模：{result.scale}（{result.warehouses} 仓库）</div>
                     <div>时长：{result.durationSec}s</div>
-                    <div>总事务数：{result.totalTransactions.toLocaleString()}</div>
+                    <div>总事务数：{(result.totalTransactions ?? 0).toLocaleString()}</div>
                   </div>
                 </div>
               </div>
@@ -297,7 +297,7 @@ export function TestPage() {
                     <div key={h.id} className="py-3 flex items-center justify-between">
                       <div>
                         <div className="text-sm font-medium text-[var(--text-primary)]">
-                          TPM <span className="text-[var(--primary)] font-bold">{h.tpm.toLocaleString()}</span>
+                          TPM <span className="text-[var(--primary)] font-bold">{(h.tpm ?? 0).toLocaleString()}</span>
                         </div>
                         <div className="text-[11px] text-[var(--text-secondary)]">
                           {h.database === 'pgsql' ? 'PostgreSQL' : 'MySQL'} · {h.scale} · {h.warehouses} 仓库 · {h.durationSec}s · {h.totalTransactions} 事务 · 平均 {h.avgLatencyMs}ms

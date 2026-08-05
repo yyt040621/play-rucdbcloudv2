@@ -1,0 +1,93 @@
+# 部署到新服务器 (10.77.110.145) 的专用 compose
+# 与 docker-compose.v2.yml 的唯一区别：server/client 用【预载镜像】而非 build
+# 使用前需先: docker load < 镜像 / docker pull postgres:16 mysql:8.0
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: sqlplayground-v2-postgres
+    environment:
+      POSTGRES_USER: playground
+      POSTGRES_PASSWORD: ${PG_PASSWORD:-playground_pass}
+      POSTGRES_DB: rucdbcloud
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./server/init-pg.sql:/docker-entrypoint-initdb.d/init-pg.sql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U playground -d rucdbcloud']
+      interval: 10s
+      retries: 5
+    restart: unless-stopped
+
+  mysql:
+    image: mysql:8.0
+    container_name: sqlplayground-v2-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./server/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ['CMD', 'mysqladmin', 'ping', '-h', 'localhost']
+      interval: 10s
+      retries: 5
+    restart: unless-stopped
+
+  server:
+    image: sqlplayground-v2-server:latest
+    container_name: sqlplayground-v2-server
+    environment:
+      NODE_ENV: production
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_USER: root
+      DB_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      DB_APP_USER: playground_app
+      DB_APP_PASSWORD: ${DB_APP_PASSWORD}
+      DB_ADMIN_DATABASE: playground_admin
+      DB_TEMPLATE_DATABASE: playground_template
+      PG_HOST: postgres
+      PG_PORT: 5432
+      PG_USER: playground
+      PG_PASSWORD: ${PG_PASSWORD:-playground_pass}
+      PG_APP_USER: playground_app
+      PG_APP_PASSWORD: ${PG_APP_PASSWORD}
+      PG_DATABASE: rucdbcloud
+      PG_TEMPLATE_SCHEMA: playground_template
+      PG_ADMIN_SCHEMA: playground_admin
+      SESSION_TTL_HOURS: ${SESSION_TTL_HOURS:-24}
+      PORT: 3001
+      MAX_ROWS_PER_QUERY: 1000
+      MAX_DB_SIZE_MB: 100
+      MAX_TABLES_PER_USER: 50
+      RATE_LIMIT_PER_MINUTE: 300
+      GLOBAL_RATE_PER_MINUTE: ${GLOBAL_RATE_PER_MINUTE:-1200}
+      CREATE_SESSION_PER_MINUTE: ${CREATE_SESSION_PER_MINUTE:-20}
+      MAX_ACTIVE_SANDBOXES: ${MAX_ACTIVE_SANDBOXES:-200}
+      MAX_SANDBOXES_PER_IP: ${MAX_SANDBOXES_PER_IP:-50}
+      MAX_STATEMENTS_PER_REQUEST: ${MAX_STATEMENTS_PER_REQUEST:-10}
+      QUERY_TIMEOUT_SECONDS: 30
+      CLEANUP_INTERVAL_MINUTES: 30
+      BENCHBASE_XMX: ${BENCHBASE_XMX:-1g}
+    ports:
+      - '3002:3001'
+    depends_on:
+      mysql:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  client:
+    image: sqlplayground-v2-client:latest
+    container_name: sqlplayground-v2-client
+    ports:
+      - '8081:80'
+    depends_on:
+      - server
+    restart: unless-stopped
+
+volumes:
+  mysql_data:
+  pg_data:

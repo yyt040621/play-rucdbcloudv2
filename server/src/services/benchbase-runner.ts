@@ -246,9 +246,10 @@ export class BenchBaseRunner {
     const isPg = db === 'pgsql';
     const type = isPg ? 'POSTGRES' : 'MYSQL';
     const driver = isPg ? 'org.postgresql.Driver' : 'com.mysql.cj.jdbc.Driver';
+    // 注意：URL 里的 & 必须转义为 &amp;，否则 XML 解析失败（SAXParseException）
     const url = isPg
-      ? `jdbc:postgresql://${config.pg.host}:${config.pg.port}/${config.benchbase.pgDatabase}?sslmode=disable&ApplicationName=tpcc&reWriteBatchedInserts=true`
-      : `jdbc:mysql://${config.db.host}:${config.db.port}/${config.benchbase.mysqlDatabase}?useSSL=false&rewriteBatchedStatements=true&serverTimezone=UTC`;
+      ? `jdbc:postgresql://${config.pg.host}:${config.pg.port}/${config.benchbase.pgDatabase}?sslmode=disable&amp;ApplicationName=tpcc&amp;reWriteBatchedInserts=true`
+      : `jdbc:mysql://${config.db.host}:${config.db.port}/${config.benchbase.mysqlDatabase}?useSSL=false&amp;rewriteBatchedStatements=true&amp;serverTimezone=UTC`;
     const user = isPg ? config.pg.user : config.db.user;
     const password = isPg ? config.pg.password : config.db.password;
 
@@ -302,7 +303,7 @@ ${txnTypes}
     }
   }
 
-  /** 解析 results/ 下的 JSON 报告，容错失败 */
+  /** 解析 results/ 下的 BenchBase 输出：summary.json（总指标）+ per-txn CSV（明细） */
   private parseResults(run: RunningRun): BenchResult {
     const base: BenchResult = {
       database: run.db,
@@ -319,17 +320,22 @@ ${txnTypes}
     };
     try {
       const files = this.findJsonFiles(run.workdir);
+      let parsedSummary = false;
       for (const f of files) {
-        const raw = JSON.parse(fs.readFileSync(f, 'utf8'));
-        this.extractSummary(raw, base);
+        if (!f.toLowerCase().includes('.summary.')) continue;
+        const raw = JSON.parse(fs.readFileSync(f, 'utf8')) as Record<string, unknown>;
+        this.extractSummaryFile(raw, base);
+        parsedSummary = true;
       }
-      if (base.tpmTOTAL === 0 && this.current) {
-        // 兜底：结果文件没解析出指标时，用最后一次吞吐近似
-        const tps = this.current.status.lastThroughput;
+      // 每事务明细（results.<Txn>.csv → perTxn；NewOrder → tpmC）
+      this.extractPerTxnFromCsv(run.workdir, base);
+      if (!parsedSummary && base.tpmTOTAL === 0) {
+        // 兜底：无 summary.json 时用实时吞吐近似
+        const tps = this.current?.status.lastThroughput;
         if (tps) {
           base.transactionsPerSecond = tps;
-          base.tpmTOTAL = tps * 60;
-          base.message = '吞吐为实时采样近似值（结果文件解析不完整）';
+          base.tpmTOTAL = Math.round(tps * 60);
+          base.message = '吞吐为实时采样近似值（未找到 summary.json）';
         } else {
           base.message = '结果文件解析不完整';
         }
@@ -338,6 +344,88 @@ ${txnTypes}
       base.message = '结果文件解析不完整';
     }
     return base;
+  }
+
+  /** 解析 BenchBase summary.json（键名以实际输出为准） */
+  private extractSummaryFile(raw: Record<string, unknown>, out: BenchResult): void {
+    const num = (v: unknown): number | undefined =>
+      typeof v === 'number' && Number.isFinite(v) ? v : undefined;
+
+    const measured = num(raw['Measured Requests']);
+    const elapsedNs = num(raw['Elapsed Time (nanoseconds)']);
+    const tps = num(raw['Throughput (requests/second)']);
+    const goodput = num(raw['Goodput (requests/second)']);
+
+    const lat = (raw['Latency Distribution'] ?? {}) as Record<string, unknown>;
+    const avgUs = num(lat['Average Latency (microseconds)']);
+    const p50Us = num(lat['Median Latency (microseconds)']);
+    const p90Us = num(lat['90th Percentile Latency (microseconds)']);
+    const p99Us = num(lat['99th Percentile Latency (microseconds)']);
+
+    if (measured) out.totalTransactions = Math.round(measured);
+    if (tps) out.transactionsPerSecond = Math.round(tps * 100) / 100;
+    if (measured && elapsedNs) {
+      // tpmTOTAL = requests / (elapsed ns → 分钟)
+      out.tpmTOTAL = Math.round(measured / (elapsedNs / 6e10));
+    }
+    if (!tps && goodput) out.transactionsPerSecond = Math.round(goodput * 100) / 100;
+    if (avgUs) out.avgLatencyMs = Math.round(avgUs / 1000);
+    if (p50Us) out.perTxn['TOTAL'] = { ...(out.perTxn['TOTAL'] || {} as BenchPerTxn), p50: Math.round(p50Us / 1000) };
+    if (p90Us) out.perTxn['TOTAL'] = { ...(out.perTxn['TOTAL'] || {} as BenchPerTxn), p90: Math.round(p90Us / 1000) };
+    if (p99Us) out.p99LatencyMs = Math.round(p99Us / 1000);
+  }
+
+  /** 解析 per-txn CSV：results.<Txn>.csv / results.csv，平均各时间窗口指标 */
+  private extractPerTxnFromCsv(workdir: string, out: BenchResult): void {
+    if (!fs.existsSync(workdir)) return;
+    for (const f of this.findCsvFiles(workdir)) {
+      const m = path.basename(f).match(/\.results\.([^.]+)\.csv$/);
+      const txnName = m ? m[1] : 'TOTAL';
+      const rows = this.parseCsv(f);
+      if (rows.length === 0) continue;
+      let tp = 0, avg = 0, p50 = 0, p90 = 0, p99 = 0, n = 0;
+      for (const r of rows) {
+        const a = parseFloat(r[1]); // Throughput (req/s)
+        const b = parseFloat(r[2]); // Average Latency (ms)
+        const c = parseFloat(r[5]); // Median
+        const d = parseFloat(r[7]); // 90th
+        const e = parseFloat(r[9]); // 99th
+        if (!Number.isFinite(a)) continue;
+        tp += a; avg += Number.isFinite(b) ? b : 0;
+        p50 += Number.isFinite(c) ? c : 0; p90 += Number.isFinite(d) ? d : 0;
+        p99 += Number.isFinite(e) ? e : 0; n++;
+      }
+      if (n === 0) continue;
+      const perTxn: BenchPerTxn = {
+        throughput: Math.round((tp / n) * 100) / 100,
+        avg: Math.round((avg / n) * 10) / 10,
+        p50: Math.round((p50 / n) * 10) / 10,
+        p90: Math.round((p90 / n) * 10) / 10,
+        p99: Math.round((p99 / n) * 10) / 10,
+      };
+      out.perTxn[txnName] = perTxn;
+      // tpmC = NewOrder 吞吐 × 60
+      if (txnName === 'NewOrder') out.tpmC = Math.round(perTxn.throughput * 60);
+    }
+  }
+
+  /** 读取 CSV（跳过头行，按逗号拆分） */
+  private parseCsv(file: string): string[][] {
+    const text = fs.readFileSync(file, 'utf8');
+    return text.split(/\r?\n/).filter(Boolean).slice(1).map((line) => line.split(','));
+  }
+
+  /** 递归查找工作目录下的所有 .csv 文件 */
+  private findCsvFiles(dir: string): string[] {
+    if (!fs.existsSync(dir)) return [];
+    const out: string[] = [];
+    for (const name of fs.readdirSync(dir)) {
+      const full = path.join(dir, name);
+      const st = fs.statSync(full);
+      if (st.isDirectory()) out.push(...this.findCsvFiles(full));
+      else if (name.toLowerCase().endsWith('.csv')) out.push(full);
+    }
+    return out;
   }
 
   /** 递归查找工作目录下的所有 .json 结果文件（BenchBase 的 -d 目录嵌套行为不确定） */
