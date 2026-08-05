@@ -36,7 +36,7 @@ SQL Playground 是一个**运行在浏览器里的数据库实验室**。它给�
 | 🗂️ **SELECT 查询** | 表单式选择表/列/条件，自动生成 SQL；也可直接写 SQL |
 | 🏗️ **CREATE 建表** | 可视化添加字段、设主键，自动生成建表语句 |
 | ✏️ **UPDATE / 🗑️ DELETE** | 带 WHERE 条件编辑和删除，危险操作有二次确认 |
-| 📊 **TPC-C 压测** | 选择规模一键压测，实时进度条 + 指标卡 + 历史记录 |
+| 📊 **性能压测（BenchBase）** | 选数据库与规模，一键跑 CMU BenchBase 标准 TPC-C，阶段徽标 + 指标卡 + 历史记录 |
 | 🔒 **沙箱隔离** | 每个用户一个独立数据库空间，数据互不可见 |
 | ⚡ **双模式** | 所有操作都支持「表单模式」（免写 SQL）和「SQL 模式」 |
 
@@ -109,7 +109,7 @@ flowchart LR
         API[Express API 网关]
         SQLG[SQL 安全守卫]
         SAND[沙箱管理器]
-        TPC[TPC-C 测试引擎]
+        TPC[BenchBase 压测引擎]
         AUDIT[审计日志]
     end
     subgraph 数据库层
@@ -128,7 +128,7 @@ flowchart LR
     API --> AUDIT
 ```
 
-**一句话看懂**：浏览器 → nginx（负责静态页面和转发）→ 后端 API → 先过「SQL 安全守卫」再操作数据库；每个用户的 SQL 只在自己那个沙箱 schema 里执行，TPC-C 压测则同时打向 PostgreSQL 和 MySQL。
+**一句话看懂**：浏览器 → nginx（负责静态页面和转发）→ 后端 API → 先过「SQL 安全守卫」再操作数据库；每个用户的 SQL 只在自己那个沙箱 schema 里执行；性能测试用 BenchBase 标准 TPC-C，每次选一个数据库（PostgreSQL 或 MySQL）打压测。
 
 ### 开发阶段时间线
 
@@ -169,7 +169,7 @@ flowchart LR
 
 - ✅ **四个核心操作页**（查询/建表/更新/删除），全部支持"表单模式 + SQL 模式"双通道
 - ✅ **可视化查询构建器**：选表、勾列、加 WHERE 条件、排序、限制行数，自动生成 SQL
-- ✅ **TPC-C 实时压测**：启动后 500ms 轮询刷新，进度条 + 已完成事务数 + TPM + 平均延迟 + 五种事务分布条形图 + 历史记录
+- ✅ **BenchBase 标准压测**：CMU 开源框架跑标准 TPC-C（NewOrder/Payment/OrderStatus/Delivery/StockLevel），阶段徽标（建表/灌数据/运行/完成）+ 实时吞吐 + 最终报告（tpmC / TPM / 延迟分位）+ 历史记录
 - ✅ **沙箱化示例数据**：每个用户开箱即用 `employees`（10 行）/ `orders`（12 行）示例表
 - ✅ **危险操作二次确认**：无 WHERE 条件的 UPDATE/DELETE、DROP TABLE 都会弹窗确认
 
@@ -188,8 +188,8 @@ flowchart LR
 | 后端自动化测试 | **127 个**全部通过 |
 | 前端组件测试 | 8 个全部通过 |
 | 支持数据库 | **PostgreSQL 16 + MySQL 8.0** 双数据库 |
-| 沙箱隔离能力 | 每用户独立 schema，单 IP 配额 3 个，全局上限 200 个 |
-| 基准测试 | 内置 **TPC-C** 标准事务（NewOrder/Payment/OrderStatus/Delivery/StockLevel） |
+| 沙箱隔离能力 | 每用户独立 schema，单 IP 配额 50 个，全局上限 200 个 |
+| 基准测试 | 内置 **CMU BenchBase** 标准 TPC-C（NewOrder/Payment/OrderStatus/Delivery/StockLevel），输出 tpmC / TPM / 延迟分位数 |
 
 > TPC-C 的具体 TPM / 延迟数据取决于服务器配置与压测规模，属于"运行时指标"，故不在此列出一组固定数字——你部署后一键压测即可获得真实结果。
 
