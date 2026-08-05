@@ -36,7 +36,7 @@ SQL Playground 是一个**运行在浏览器里的数据库实验室**。它给�
 | 🗂️ **SELECT 查询** | 表单式选择表/列/条件，自动生成 SQL；也可直接写 SQL |
 | 🏗️ **CREATE 建表** | 可视化添加字段、设主键，自动生成建表语句 |
 | ✏️ **UPDATE / 🗑️ DELETE** | 带 WHERE 条件编辑和删除，危险操作有二次确认 |
-| 📊 **性能压测（BenchBase）** | 选数据库与规模，一键跑 CMU BenchBase 标准 TPC-C，阶段徽标 + 指标卡 + 历史记录 |
+| 📊 **性能压测（BenchBase）** | 选数据库与规模，一键跑 CMU BenchBase 标准 TPC-C（执行固定 60s）；阶段徽标 + 实时吞吐 + 结果卡（含总耗时）+ 历史记录 |
 | 🔒 **沙箱隔离** | 每个用户一个独立数据库空间，数据互不可见 |
 | ⚡ **双模式** | 所有操作都支持「表单模式」（免写 SQL）和「SQL 模式」 |
 
@@ -169,7 +169,7 @@ flowchart LR
 
 - ✅ **四个核心操作页**（查询/建表/更新/删除），全部支持"表单模式 + SQL 模式"双通道
 - ✅ **可视化查询构建器**：选表、勾列、加 WHERE 条件、排序、限制行数，自动生成 SQL
-- ✅ **BenchBase 标准压测**：CMU 开源框架跑标准 TPC-C（NewOrder/Payment/OrderStatus/Delivery/StockLevel），阶段徽标（建表/灌数据/运行/完成）+ 实时吞吐 + 最终报告（tpmC / TPM / 延迟分位）+ 历史记录
+- ✅ **BenchBase 标准压测**：CMU 开源框架跑标准 TPC-C（NewOrder/Payment/OrderStatus/Delivery/StockLevel），执行时长固定 60s；阶段徽标（建表/灌数据/运行/完成）+ 实时吞吐 + 最终报告（tpmC / TPM / 延迟分位 + 总耗时）+ 历史记录
 - ✅ **沙箱化示例数据**：每个用户开箱即用 `employees`（10 行）/ `orders`（12 行）示例表
 - ✅ **危险操作二次确认**：无 WHERE 条件的 UPDATE/DELETE、DROP TABLE 都会弹窗确认
 
@@ -189,7 +189,7 @@ flowchart LR
 | 前端组件测试 | 8 个全部通过 |
 | 支持数据库 | **PostgreSQL 16 + MySQL 8.0** 双数据库 |
 | 沙箱隔离能力 | 每用户独立 schema，单 IP 配额 50 个，全局上限 200 个 |
-| 基准测试 | 内置 **CMU BenchBase** 标准 TPC-C（NewOrder/Payment/OrderStatus/Delivery/StockLevel），输出 tpmC / TPM / 延迟分位数 |
+| 基准测试 | 内置 **CMU BenchBase** 标准 TPC-C（NewOrder/Payment/OrderStatus/Delivery/StockLevel），输出 tpmC / TPM / 延迟分位数 / 总耗时 |
 
 > TPC-C 的具体 TPM / 延迟数据取决于服务器配置与压测规模，属于"运行时指标"，故不在此列出一组固定数字——你部署后一键压测即可获得真实结果。
 
@@ -232,7 +232,7 @@ docker compose up -d --build
 2. **SELECT 页**：左上选表 → 勾选列 → 添加 WHERE 条件 → 点「查询」；或切换到「SQL」模式直接写 `SELECT * FROM employees;`
 3. **CREATE 页**：建表 Tab 填表名、加字段、设主键 → 生成并执行；插入数据 Tab 选表填值插入
 4. **UPDATE / DELETE 页**：选表 → 填 SET / WHERE → 执行（无 WHERE 会弹窗确认）
-5. **Test 页**：选数据库（MySQL / PostgreSQL）→ 选规模 → 开始测试，看实时指标
+5. **Test 页**：选数据库（MySQL / PostgreSQL）→ 选规模 → 开始测试（执行固定 60s），看实时吞吐与最终报告（含总耗时）
 
 ### 本地开发
 
